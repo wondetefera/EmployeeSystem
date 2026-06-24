@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reports - Employee Management System</title>
+    <link href="/assets/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/assets/css/all.min.css" rel="stylesheet">
+    <link href="/assets/css/dark-theme.css" rel="stylesheet">
+    <link href="assets/css/dashboard.css" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container-fluid">
+            <button class="mobile-nav-toggle" onclick="toggleSidebar()">
+                <i class="fas fa-bars"></i>
+            </button>
+            <a class="navbar-brand" href="/dashboard">
+                <i class="fas fa-building me-2"></i>Employee Management System
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="#" onclick="logout()">
+                    <i class="fas fa-sign-out-alt me-1"></i>Logout
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid" style="padding-top: 56px;">
+        <div class="row">
+            <nav class="col-md-3 col-lg-2 d-md-block bg-light sidebar" id="sidebar">
+                <div class="position-sticky pt-3">
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link" href="/dashboard">
+                                <i class="fas fa-tachometer-alt me-2"></i>Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/employees">
+                                <i class="fas fa-users me-2"></i>Employees
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/departments">
+                                <i class="fas fa-building me-2"></i>Departments
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/attendance">
+                                <i class="fas fa-clock me-2"></i>Attendance
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/leave">
+                                <i class="fas fa-calendar-alt me-2"></i>Leave Management
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link active" href="/reports">
+                                <i class="fas fa-chart-bar me-2"></i>Reports
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/id-badges">
+                                <i class="fas fa-id-card me-2"></i>ID Badges
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 main-content">
+                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                    <h1 class="h2">Reports</h1>
+                    <div class="btn-toolbar mb-2 mb-md-0">
+                        <div class="btn-group me-2">
+                            <button class="btn btn-outline-secondary" onclick="exportReport('pdf')">
+                                <i class="fas fa-file-pdf me-1"></i>Export PDF
+                            </button>
+                            <button class="btn btn-outline-secondary" onclick="exportReport('excel')">
+                                <i class="fas fa-file-excel me-1"></i>Export Excel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Report Type Selection -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0"><i class="fas fa-filter me-2"></i>Report Filters</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-3">
+                                        <label for="reportType" class="form-label">Report Type</label>
+                                        <select class="form-select" id="reportType" onchange="loadReport()">
+                                            <option value="attendance">Attendance Report</option>
+                                            <option value="leave">Leave Report</option>
+                                            <option value="employee">Employee Summary</option>
+                                            <option value="department">Department Report</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="startDate" class="form-label">Start Date</label>
+                                        <input type="date" class="form-control" id="startDate" onchange="loadReport()">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="endDate" class="form-label">End Date</label>
+                                        <input type="date" class="form-control" id="endDate" onchange="loadReport()">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="department" class="form-label">Department</label>
+                                        <select class="form-select" id="department" onchange="loadReport()">
+                                            <option value="">All Departments</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="row mt-3">
+                                    <div class="col-12">
+                                        <button class="btn btn-primary me-2" onclick="loadReport()">
+                                            <i class="fas fa-refresh me-1"></i>Refresh Report
+                                        </button>
+                                        <button class="btn btn-secondary me-2" onclick="loadDepartments()">
+                                            <i class="fas fa-building me-1"></i>Reload Departments
+                                        </button>
+                                        <button class="btn btn-info" onclick="checkAuthentication()">
+                                            <i class="fas fa-user me-1"></i>Check Auth
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Report Content -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0" id="reportTitle">
+                                    <i class="fas fa-chart-line me-2"></i>Attendance Report
+                                </h5>
+                                <span class="badge bg-primary" id="reportCount">0 records</span>
+                            </div>
+                            <div class="card-body">
+                                <div id="reportContent">
+                                    <div class="text-center py-4">
+                                        <div class="spinner-border" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                        <p class="mt-2">Loading report data...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Summary Cards -->
+                <div class="row mt-4" id="summaryCards">
+                    <!-- Summary cards will be populated by JavaScript -->
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="/assets/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/js/config.js"></script>
+    <script>
+        let currentUser = null;
+
+        document.addEventListener('DOMContentLoaded', async function() {
+            console.log('🚀 Reports page loaded, starting initialization...');
+            
+            try {
+                // Check authentication first
+                console.log('📋 Step 1: Checking authentication...');
+                await checkAuthentication();
+                
+                // Set default date range (current month)
+                console.log('📅 Step 2: Setting default dates...');
+                const now = new Date();
+                const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+                const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+                
+                document.getElementById('startDate').value = firstDay.toISOString().split('T')[0];
+                document.getElementById('endDate').value = lastDay.toISOString().split('T')[0];
+                
+                // Load departments
+                console.log('🏢 Step 3: Loading departments...');
+                await loadDepartments();
+                
+                // Load initial report
+                console.log('📊 Step 4: Loading initial report...');
+                await loadReport();
+                
+                console.log('✅ Initialization complete!');
+            } catch (error) {
+                console.error('❌ Initialization failed:', error);
+                document.getElementById('reportContent').innerHTML = `
+                    <div class="text-center py-4 text-danger">
+                        <i class="fas fa-exclamation-triangle fa-2x mb-3"></i>
+                        <h5>Initialization Error</h5>
+                        <p>${error.message}</p>
+                        <button class="btn btn-primary" onclick="location.reload()">Retry</button>
+                    </div>
+                `;
+            }
+        });
+
+        async function checkAuthentication() {
+            try {
+                console.log('🔐 Checking authentication...');
+                const response = await fetchApi('/api/user');
+                console.log('🔐 Auth response status:', response.status);
+                
+                if (response.ok) {
+                    currentUser = await response.json();
+                    console.log('✅ Authentication successful:', currentUser);
+                    return true;
+                } else {
+                    console.log('❌ Not authenticated, redirecting to login');
+                    window.location.href = '/login';
+                    return false;
+                }
+            } catch (error) {
+                console.error('❌ Authentication check failed:', error);
+                // Don't redirect immediately, let user see the error
+                throw new Error(`Authentication failed: ${error.message}`);
+            }
+        }
+
+        async function loadDepartments() {
+            try {
+                console.log('Loading departments...');
+                const response = await fetchApi('/api/departments');
+                console.log('Departments response status:', response.status);
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log('Departments data:', result);
+                    
+                    const select = document.getElementById('department');
+                    
+                    result.data.forEach(dept => {
+                        const option = document.createElement('option');
+                        option.value = dept.name;
+                        option.textContent = dept.name;
+                        select.appendChild(option);
+                        console.log('Added department option:', dept.name);
+                    });
+                } else {
+                    console.error('Failed to load departments:', response.status);
+                }
+            } catch (error) {
+                console.error('Error loading departments:', error);
+            }
+        }
+
+        async function loadReport() {
+            const reportType = document.getElementById('reportType').value;
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            const department = document.getElementById('department').value;
+
+            console.log('Loading report with filters:', { reportType, startDate, endDate, department });
+
+            document.getElementById('reportContent').innerHTML = `
+                <div class="text-center py-4">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading ${reportType} report...</p>
+                </div>
+            `;
+
+            try {
+                let endpoint = `/api/reports/${reportType}`;
+                const params = new URLSearchParams();
+                if (startDate) params.append('start_date', startDate);
+                if (endDate) params.append('end_date', endDate);
+                if (department) params.append('department', department);
+                
+                if (params.toString()) {
+                    endpoint += '?' + params.toString();
+                }
+
+                console.log('Making request to:', endpoint);
+
+                const response = await fetchApi(endpoint);
+                console.log('Response status:', response.status);
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log('Response data:', result);
+                    displayReport(reportType, result.data);
+                } else {
+                    const errorText = await response.text();
+                    console.error('API Error:', response.status, errorText);
+                    throw new Error(`Failed to load report: ${response.status}`);
+                }
+            } catch (error) {
+                console.error('Error loading report:', error);
+                document.getElementById('reportContent').innerHTML = `
+                    <div class="text-center py-4 text-danger">
+                        <i class="fas fa-exclamation-triangle fa-2x mb-3"></i>
+                        <p>Error loading report data</p>
+                    </div>
+                `;
+            }
+        }
+
+        function displayReport(type, data) {
+            const titles = {
+                attendance: 'Attendance Report',
+                leave: 'Leave Report',
+                employee: 'Employee Summary',
+                department: 'Department Report'
+            };
+
+            document.getElementById('reportTitle').innerHTML = `
+                <i class="fas fa-chart-line me-2"></i>${titles[type]}
+            `;
+            document.getElementById('reportCount').textContent = `${data.length} records`;
+
+            switch (type) {
+                case 'attendance':
+                    displayAttendanceReport(data);
+                    break;
+                case 'leave':
+                    displayLeaveReport(data);
+                    break;
+                case 'employee':
+                    displayEmployeeReport(data);
+                    break;
+                case 'department':
+                    displayDepartmentReport(data);
+                    break;
+            }
+        }
+
+        function displayAttendanceReport(data) {
+            if (data.length === 0) {
+                document.getElementById('reportContent').innerHTML = `
+                    <div class="text-center py-4">
+                        <i class="fas fa-info-circle fa-2x text-muted mb-3"></i>
+                        <p>No attendance records found for the selected period</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const table = `
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Employee</th>
+                                <th>Date</th>
+                                <th>Morning In</th>
+                                <th>Morning Out</th>
+                                <th>Afternoon In</th>
+                                <th>Afternoon Out</th>
+                                <th>Total Hours</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.map(record => `
+                                <tr>
+                                    <td>${record.employee_name}</td>
+                                    <td>${record.date}</td>
+                                    <td>${record.morning_checkin || '--:--'}</td>
+                                    <td>${record.morning_checkout || '--:--'}</td>
+                                    <td>${record.afternoon_checkin || '--:--'}</td>
+                                    <td>${record.afternoon_checkout || '--:--'}</td>
+                                    <td>${record.total_hours || 0} hrs</td>
+                                    <td>
+                                        <span class="badge bg-${getStatusColor(record.status)}">
+                                            ${record.status}
+                                        </span>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            document.getElementById('reportContent').innerHTML = table;
+            displayAttendanceSummary(data);
+        }
+
+        function displayLeaveReport(data) {
+            if (data.length === 0) {
+                document.getElementById('reportContent').innerHTML = `
+                    <div class="text-center py-4">
+                        <i class="fas fa-info-circle fa-2x text-muted mb-3"></i>
+                        <p>No leave requests found for the selected period</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const table = `
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Employee</th>
+                                <th>Leave Type</th>
+                                <th>Start Date</th>
+                                <th>End Date</th>
+                                <th>Days</th>
+                                <th>Reason</th>
+                                <th>Status</th>
+                                <th>Applied On</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.map(request => `
+                                <tr>
+                                    <td>${request.employee_name}</td>
+                                    <td>${request.leave_type}</td>
+                                    <td>${request.start_date}</td>
+                                    <td>${request.end_date}</td>
+                                    <td>${request.days_requested}</td>
+                                    <td>${request.reason}</td>
+                                    <td>
+                                        <span class="badge bg-${getLeaveStatusColor(request.status)}">
+                                            ${request.status}
+                                        </span>
+                                    </td>
+                                    <td>${request.created_at}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            document.getElementById('reportContent').innerHTML = table;
+            displayLeaveSummary(data);
+        }
+
+        function displayEmployeeReport(data) {
+            if (data.length === 0) {
+                document.getElementById('reportContent').innerHTML = `
+                    <div class="text-center py-4">
+                        <i class="fas fa-info-circle fa-2x text-muted mb-3"></i>
+                        <p>No employees found for the selected criteria</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const table = `
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Employee ID</th>
+                                <th>Name</th>
+                                <th>Department</th>
+                                <th>Job Title</th>
+                                <th>Start Date</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.map(emp => `
+                                <tr>
+                                    <td>${emp.employee_id}</td>
+                                    <td>${emp.first_name} ${emp.last_name}</td>
+                                    <td>${emp.department || 'N/A'}</td>
+                                    <td>${emp.job_title || 'N/A'}</td>
+                                    <td>${emp.start_date}</td>
+                                    <td>
+                                        <span class="badge bg-${emp.status === 'active' ? 'success' : 'secondary'}">
+                                            ${emp.status}
+                                        </span>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            document.getElementById('reportContent').innerHTML = table;
+            displayEmployeeSummary(data);
+        }
+
+        function displayDepartmentReport(data) {
+            if (data.length === 0) {
+                document.getElementById('reportContent').innerHTML = `
+                    <div class="text-center py-4">
+                        <i class="fas fa-info-circle fa-2x text-muted mb-3"></i>
+                        <p>No department data available</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const table = `
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Department</th>
+                                <th>Description</th>
+                                <th>Total Employees</th>
+                                <th>Active Employees</th>
+                                <th>Attendance Rate (30 days)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.map(dept => `
+                                <tr>
+                                    <td><strong>${dept.name}</strong></td>
+                                    <td>${dept.description || 'N/A'}</td>
+                                    <td>${dept.total_employees}</td>
+                                    <td>${dept.active_employees}</td>
+                                    <td>
+                                        <span class="badge bg-${dept.attendance_rate >= 80 ? 'success' : dept.attendance_rate >= 60 ? 'warning' : 'danger'}">
+                                            ${dept.attendance_rate}%
+                                        </span>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            document.getElementById('reportContent').innerHTML = table;
+            displayDepartmentSummary(data);
+        }
+
+        function displayEmployeeSummary(data) {
+            const totalEmployees = data.length;
+            const activeEmployees = data.filter(emp => emp.status === 'active').length;
+            const inactiveEmployees = totalEmployees - activeEmployees;
+            
+            // Group by department
+            const deptGroups = {};
+            data.forEach(emp => {
+                const dept = emp.department || 'Unassigned';
+                deptGroups[dept] = (deptGroups[dept] || 0) + 1;
+            });
+            const departmentCount = Object.keys(deptGroups).length;
+
+            document.getElementById('summaryCards').innerHTML = `
+                <div class="col-md-3">
+                    <div class="card border-left-primary">
+                        <div class="card-body">
+                            <div class="text-primary">Total Employees</div>
+                            <div class="h4">${totalEmployees}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-left-success">
+                        <div class="card-body">
+                            <div class="text-success">Active</div>
+                            <div class="h4">${activeEmployees}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-left-warning">
+                        <div class="card-body">
+                            <div class="text-warning">Inactive</div>
+                            <div class="h4">${inactiveEmployees}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-left-info">
+                        <div class="card-body">
+                            <div class="text-info">Departments</div>
+                            <div class="h4">${departmentCount}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function displayDepartmentSummary(data) {
+            const totalDepartments = data.length;
+            const totalEmployees = data.reduce((sum, dept) => sum + dept.total_employees, 0);
+            const avgAttendanceRate = data.length > 0 ? 
+                Math.round(data.reduce((sum, dept) => sum + dept.attendance_rate, 0) / data.length) : 0;
+            const activeDepartments = data.filter(dept => dept.active_employees > 0).length;
+
+            document.getElementById('summaryCards').innerHTML = `
+                <div class="col-md-3">
+                    <div class="card border-left-primary">
+                        <div class="card-body">
+                            <div class="text-primary">Total Departments</div>
+                            <div class="h4">${totalDepartments}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-left-success">
+                        <div class="card-body">
+                            <div class="text-success">Active Departments</div>
+                            <div class="h4">${activeDepartments}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-left-info">
+                        <div class="card-body">
+                            <div class="text-info">Total Employees</div>
+                            <div class="h4">${totalEmployees}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-left-warning">
+                        <div class="card-body">
+                            <div class="text-warning">Avg Attendance</div>
+                            <div class="h4">${avgAttendanceRate}%</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function displayAttendanceSummary(data) {
+            const totalRecords = data.length;
+            const presentCount = data.filter(r => r.status === 'present').length;
+            const partialCount = data.filter(r => r.status === 'partial').length;
+            const absentCount = data.filter(r => r.status === 'absent').length;
+
+            document.getElementById('summaryCards').innerHTML = `
+                <div class="col-md-3">
+                    <div class="card border-left-success">
+                        <div class="card-body">
+                            <div class="text-success">Present</div>
+                            <div class="h4">${presentCount}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-left-warning">
+                        <div class="card-body">
+                            <div class="text-warning">Partial</div>
+                            <div class="h4">${partialCount}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-left-danger">
+                        <div class="card-body">
+                            <div class="text-danger">Absent</div>
+                            <div class="h4">${absentCount}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-left-info">
+                        <div class="card-body">
+                            <div class="text-info">Total Records</div>
+                            <div class="h4">${totalRecords}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function displayLeaveSummary(data) {
+            const totalRequests = data.length;
+            const approvedCount = data.filter(r => r.status === 'approved').length;
+            const pendingCount = data.filter(r => r.status === 'pending').length;
+            const rejectedCount = data.filter(r => r.status === 'rejected').length;
+
+            document.getElementById('summaryCards').innerHTML = `
+                <div class="col-md-3">
+                    <div class="card border-left-success">
+                        <div class="card-body">
+                            <div class="text-success">Approved</div>
+                            <div class="h4">${approvedCount}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-left-warning">
+                        <div class="card-body">
+                            <div class="text-warning">Pending</div>
+                            <div class="h4">${pendingCount}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-left-danger">
+                        <div class="card-body">
+                            <div class="text-danger">Rejected</div>
+                            <div class="h4">${rejectedCount}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-left-info">
+                        <div class="card-body">
+                            <div class="text-info">Total Requests</div>
+                            <div class="h4">${totalRequests}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function getStatusColor(status) {
+            switch (status) {
+                case 'present': return 'success';
+                case 'partial': return 'warning';
+                case 'absent': return 'danger';
+                default: return 'secondary';
+            }
+        }
+
+        function getLeaveStatusColor(status) {
+            switch (status) {
+                case 'approved': return 'success';
+                case 'pending': return 'warning';
+                case 'rejected': return 'danger';
+                default: return 'secondary';
+            }
+        }
+
+        async function exportReport(format) {
+            const reportType = document.getElementById('reportType').value;
+            
+            try {
+                if (format === 'pdf') {
+                    await exportToPDF(reportType);
+                } else if (format === 'excel') {
+                    await exportToExcel(reportType);
+                }
+            } catch (error) {
+                console.error('Export error:', error);
+                showAlert('danger', 'Failed to export report. Please try again.');
+            }
+        }
+
+        async function exportToPDF(reportType) {
+            try {
+                const response = await fetchApi('/api/reports/export/pdf', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ reportType })
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    
+                    // Create a new window with the HTML content for printing
+                    const printWindow = window.open('', '_blank');
+                    printWindow.document.write(result.html);
+                    printWindow.document.close();
+                    
+                    // Wait for content to load then print
+                    printWindow.onload = function() {
+                        printWindow.print();
+                    };
+                    
+                    showAlert('success', 'PDF report opened in new window. Use browser print to save as PDF.');
+                } else {
+                    throw new Error('Failed to generate PDF');
+                }
+            } catch (error) {
+                console.error('PDF export error:', error);
+                showAlert('danger', 'Failed to generate PDF report');
+            }
+        }
+
+        async function exportToExcel(reportType) {
+            try {
+                const response = await fetchApi('/api/reports/export/excel', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ reportType })
+                });
+
+                if (response.ok) {
+                    // Create blob and download
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${reportType}_report_${new Date().toISOString().split('T')[0]}.csv`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                    
+                    showAlert('success', 'Excel report downloaded successfully');
+                } else {
+                    throw new Error('Failed to generate Excel report');
+                }
+            } catch (error) {
+                console.error('Excel export error:', error);
+                showAlert('danger', 'Failed to generate Excel report');
+            }
+        }
+
+        function showAlert(type, message) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+            alertDiv.style.cssText = 'top: 70px; right: 20px; z-index: 9999; min-width: 300px;';
+            alertDiv.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            
+            document.body.appendChild(alertDiv);
+            
+            setTimeout(() => {
+                if (alertDiv.parentNode) {
+                    alertDiv.parentNode.removeChild(alertDiv);
+                }
+            }, 5000);
+        }
+
+        async function logout() {
+            try {
+                await fetchApi('/api/logout', { method: 'POST' });
+                window.location.href = '/login';
+            } catch (error) {
+                console.error('Logout error:', error);
+                window.location.href = '/login';
+            }
+        }
+
+        // Mobile navigation toggle
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('show');
+        }
+
+        // Close sidebar when clicking outside on mobile
+        document.addEventListener('click', function(event) {
+            const sidebar = document.getElementById('sidebar');
+            const toggle = document.querySelector('.mobile-nav-toggle');
+            
+            if (window.innerWidth <= 768 && 
+                !sidebar.contains(event.target) && 
+                !toggle.contains(event.target) && 
+                sidebar.classList.contains('show')) {
+                sidebar.classList.remove('show');
+            }
+        });
+    </script>
+
+    <!-- Copyright Footer -->
+    <footer class="bg-dark text-white py-2 mt-4">
+        <div class="container text-center">
+            <small>
+                © 2025/26 Employee Management System. All rights reserved. | Prepared by Wondwosen Tefera
+            </small>
+        </div>
+    </footer>
+</body>
+</html>

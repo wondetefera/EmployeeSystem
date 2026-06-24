@@ -1,0 +1,2496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attendance - Employee Management System</title>
+    <link href="/assets/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/assets/css/all.min.css" rel="stylesheet">
+    <link href="/assets/css/dark-theme.css" rel="stylesheet">
+    <link href="assets/css/dashboard.css" rel="stylesheet">
+    
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/dashboard">
+                <i class="fas fa-building me-2"></i>Employee Management System
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="#" onclick="logout()">
+                    <i class="fas fa-sign-out-alt me-1"></i>Logout
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Mobile Navigation Toggle -->
+    <button class="mobile-nav-toggle d-md-none" onclick="toggleMobileNav()">
+        <i class="fas fa-bars"></i>
+    </button>
+    
+    <!-- Mobile Sidebar Overlay -->
+    <div class="sidebar-overlay" onclick="closeMobileNav()"></div>
+
+    <div class="container-fluid" style="padding-top: 56px;">
+        <div class="row">
+            <nav class="col-md-3 col-lg-2 d-md-block bg-light sidebar">
+                <div class="position-sticky pt-3">
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link" href="/dashboard">
+                                <i class="fas fa-tachometer-alt me-2"></i>Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item" id="employees-nav" style="display: none;">
+                            <a class="nav-link" href="/employees">
+                                <i class="fas fa-users me-2"></i>Employees
+                            </a>
+                        </li>
+                        <li class="nav-item" id="departments-nav" style="display: none;">
+                            <a class="nav-link" href="/departments">
+                                <i class="fas fa-building me-2"></i>Departments
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link active" href="/attendance">
+                                <i class="fas fa-clock me-2"></i>Attendance
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/leave">
+                                <i class="fas fa-calendar-alt me-2"></i>Leave Management
+                            </a>
+                        </li>
+                        <li class="nav-item" id="reports-nav" style="display: none;">
+                            <a class="nav-link" href="/reports">
+                                <i class="fas fa-chart-bar me-2"></i>Reports
+                            </a>
+                        </li>
+                        <li class="nav-item" id="id-badges-nav" style="display: none;">
+                            <a class="nav-link" href="/id-badges">
+                                <i class="fas fa-id-card me-2"></i>ID Badges
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
+                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                    <h1 class="h2">Attendance Management</h1>
+                    <div class="btn-toolbar mb-2 mb-md-0">
+                        <div class="btn-group me-2">
+                            <span class="badge bg-primary fs-6">
+                                <i class="fas fa-calendar me-1"></i><span id="current-date"></span>
+                            </span>
+                        </div>
+                        <!-- Admin Status Indicator -->
+                        <div id="admin-status" style="display: none;">
+                            <span class="badge bg-danger fs-6 pulse">
+                                <i class="fas fa-user-shield me-1"></i>ADMIN MODE
+                            </span>
+                        </div>
+                        <!-- Manager Status Indicator -->
+                        <div id="manager-status" style="display: none;">
+                            <span class="badge bg-warning fs-6 pulse">
+                                <i class="fas fa-user-tie me-1"></i>MANAGER MODE
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Admin Notification Banner -->
+                <div class="alert alert-primary alert-dismissible fade show" id="admin-notification" style="display: none; background: linear-gradient(135deg, #007bff 0%, #0056b3 100%); border: 2px solid #0056b3; color: white;" role="alert">
+                    <h5><i class="fas fa-user-shield me-2"></i>Administrator Access Detected</h5>
+                    <p class="mb-2">You have admin privileges! You can now:</p>
+                    <ul class="mb-2">
+                        <li>Edit morning and afternoon check-in/out times for any employee</li>
+                        <li><strong>Record overtime</strong> hours with reasons</li>
+                        <li>Create new attendance records</li>
+                        <li>Fix incorrect attendance data</li>
+                        <li>Configure attendance policies and excuse violations</li>
+                    </ul>
+                    <p class="mb-0"><strong>Look for the red "ADMIN CONTROLS" section below to get started.</strong></p>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert"></button>
+                </div>
+
+                <!-- Manager Notification Banner -->
+                <div class="alert alert-warning alert-dismissible fade show" id="manager-notification" style="display: none;" role="alert">
+                    <h5><i class="fas fa-user-tie me-2"></i>Manager Access Detected</h5>
+                    <p class="mb-2">You have manager privileges! You can now:</p>
+                    <ul class="mb-2">
+                        <li>View detailed attendance violation reports</li>
+                        <li>Monitor employee punctuality and attendance patterns</li>
+                        <li>Export violation data for management review</li>
+                        <li>View current attendance policies</li>
+                    </ul>
+                    <p class="mb-0"><strong>Look for the yellow "MANAGER CONTROLS" section below to get started.</strong></p>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+
+                <!-- Time Restrictions Information -->
+                <div class="alert alert-info alert-dismissible fade show" role="alert">
+                    <h5><i class="fas fa-clock me-2"></i>Attendance Time Restrictions</h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>📅 Monday - Friday:</h6>
+                            <ul class="mb-2">
+                                <li><strong>Morning:</strong> 8:00 AM - 12:00 PM</li>
+                                <li><strong>Afternoon:</strong> 1:00 PM - 5:00 PM</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>📅 Saturday:</h6>
+                            <ul class="mb-2">
+                                <li><strong>Morning Only:</strong> 8:00 AM - 12:00 PM</li>
+                                <li><strong>Afternoon:</strong> Not Available</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="row mt-2">
+                        <div class="col-12">
+                            <p class="mb-0">
+                                <strong>Current Time:</strong> <span id="live-time" class="text-primary"></span> | 
+                                <strong>Today:</strong> <span id="current-day" class="text-primary"></span> | 
+                                <strong>Status:</strong> <span id="time-status" class="fw-bold"></span>
+                            </p>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+
+                <!-- Quick Actions for Current User -->
+                <div class="row mb-4" id="attendance-actions">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0"><i class="fas fa-clock me-2"></i>Quick Actions</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row g-3">
+                                    <div class="col-12 col-sm-6 col-md-3">
+                                        <button class="btn btn-success w-100" onclick="checkIn('morning')">
+                                            <i class="fas fa-sign-in-alt me-2"></i>Morning Check-in
+                                        </button>
+                                    </div>
+                                    <div class="col-12 col-sm-6 col-md-3">
+                                        <button class="btn btn-warning w-100" onclick="checkOut('morning')">
+                                            <i class="fas fa-sign-out-alt me-2"></i>Morning Check-out
+                                        </button>
+                                    </div>
+                                    <div class="col-12 col-sm-6 col-md-3">
+                                        <button class="btn btn-info w-100" onclick="checkIn('afternoon')">
+                                            <i class="fas fa-sign-in-alt me-2"></i>Afternoon Check-in
+                                        </button>
+                                    </div>
+                                    <div class="col-12 col-sm-6 col-md-3">
+                                        <button class="btn btn-danger w-100" onclick="checkOut('afternoon')">
+                                            <i class="fas fa-sign-out-alt me-2"></i>Afternoon Check-out
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <!-- Flexible Workflow Information -->
+                                <div class="mt-3 p-2 bg-primary text-white rounded">
+                                    <h6><i class="fas fa-info-circle me-2"></i>Flexible Attendance</h6>
+                                    <small>
+                                        • You can start with either Morning or Afternoon session<br>
+                                        • Morning session is not required to work afternoon<br>
+                                        • Complete any session you work (check-in + check-out)<br>
+                                        • If you start morning, complete it before starting afternoon
+                                    </small>
+                                </div>
+                                
+                                <!-- Today's Status -->
+                                <div id="today-status" class="mt-3 p-3 bg-light rounded">
+                                    <h6>Today's Status:</h6>
+                                    <div class="row">
+                                        <div class="col-md-3">
+                                            <small class="text-muted">Morning In:</small><br>
+                                            <strong id="morning-in">--:--</strong>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <small class="text-muted">Morning Out:</small><br>
+                                            <strong id="morning-out">--:--</strong>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <small class="text-muted">Afternoon In:</small><br>
+                                            <strong id="afternoon-in">--:--</strong>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <small class="text-muted">Afternoon Out:</small><br>
+                                            <strong id="afternoon-out">--:--</strong>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Admin Controls (Only visible to admins) -->
+                <div class="row mb-4" id="admin-controls" style="display: none;">
+                    <div class="col-12">
+                        <div class="card border-danger shadow">
+                            <div class="card-header bg-danger text-white">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-user-shield me-2"></i>
+                                    🔧 ADMIN CONTROLS - <strong>Edit Attendance Times</strong>
+                                </h5>
+                                <small>Only administrators can see this section</small>
+                            </div>
+                            <div class="card-body">
+                                <!-- Admin Settings Row -->
+                                <div class="row mb-4">
+                                    <div class="col-12">
+                                        <div class="card border-info">
+                                            <div class="card-header bg-info text-white">
+                                                <h6 class="mb-0"><i class="fas fa-cog me-2"></i>Attendance Policy Settings</h6>
+                                            </div>
+                                            <div class="card-body">
+                                                <div class="row g-3">
+                                                    <div class="col-md-3">
+                                                        <label class="form-label">Morning Start Time:</label>
+                                                        <input type="time" class="form-control" id="morning-start-time" value="09:00">
+                                                        <small class="text-muted">Expected morning check-in time</small>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <label class="form-label">Morning End Time:</label>
+                                                        <input type="time" class="form-control" id="morning-end-time" value="12:00">
+                                                        <small class="text-muted">Expected morning check-out time</small>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <label class="form-label">Afternoon Start Time:</label>
+                                                        <input type="time" class="form-control" id="afternoon-start-time" value="13:00">
+                                                        <small class="text-muted">Expected afternoon check-in time</small>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <label class="form-label">Afternoon End Time:</label>
+                                                        <input type="time" class="form-control" id="afternoon-end-time" value="17:00">
+                                                        <small class="text-muted">Expected afternoon check-out time</small>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <label class="form-label">Late Tolerance (minutes):</label>
+                                                        <input type="number" class="form-control" id="late-tolerance" value="15" min="0" max="60">
+                                                        <small class="text-muted">Grace period for late check-in</small>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <label class="form-label">Early Leave Tolerance (minutes):</label>
+                                                        <input type="number" class="form-control" id="early-tolerance" value="15" min="0" max="60">
+                                                        <small class="text-muted">Grace period for early check-out</small>
+                                                    </div>
+                                                    <div class="col-md-4 d-flex align-items-end">
+                                                        <button class="btn btn-info w-100" onclick="saveAttendancePolicy()">
+                                                            <i class="fas fa-save me-1"></i>Save Policy
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <div class="card border-primary shadow-sm">
+                                            <div class="card-header bg-primary text-white">
+                                                <h6 class="mb-0"><i class="fas fa-edit me-2"></i><strong>Edit Attendance Times</strong></h6>
+                                            </div>
+                                            <div class="card-body">
+                                        <div class="mb-3">
+                                            <label class="form-label">Select Employee:</label>
+                                            <select class="form-select" id="admin-employee-select" onchange="loadEmployeeAttendance()">
+                                                <option value="">Choose employee...</option>
+                                            </select>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Select Date:</label>
+                                            <input type="date" class="form-control" id="admin-date-select" onchange="loadEmployeeAttendance()">
+                                        </div>
+                                        <div id="admin-attendance-form" style="display: none;">
+                                            <div class="row g-2">
+                                                <div class="col-md-6">
+                                                    <label class="form-label">Morning Check-in:</label>
+                                                    <input type="time" class="form-control" id="admin-morning-in">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label">Morning Check-out:</label>
+                                                    <input type="time" class="form-control" id="admin-morning-out">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label">Afternoon Check-in:</label>
+                                                    <input type="time" class="form-control" id="admin-afternoon-in">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label">Afternoon Check-out:</label>
+                                                    <input type="time" class="form-control" id="admin-afternoon-out">
+                                                </div>
+                                                <div class="col-12 mt-3">
+                                                    <button class="btn btn-primary" onclick="updateAttendanceTimes()">
+                                                        <i class="fas fa-save me-1"></i>Update Times
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                                    <div class="col-md-4">
+                                        <div class="card border-success shadow-sm">
+                                            <div class="card-header bg-success text-white">
+                                                <h6 class="mb-0"><i class="fas fa-clock me-2"></i><strong>Record Overtime</strong></h6>
+                                            </div>
+                                            <div class="card-body">
+                                        <div class="mb-3">
+                                            <label class="form-label">Employee:</label>
+                                            <select class="form-select" id="overtime-employee-select">
+                                                <option value="">Choose employee...</option>
+                                            </select>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Date:</label>
+                                            <input type="date" class="form-control" id="overtime-date">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Overtime Hours:</label>
+                                            <input type="number" class="form-control" id="overtime-hours" step="0.5" min="0" max="12">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Reason:</label>
+                                            <textarea class="form-control" id="overtime-reason" rows="2" placeholder="Reason for overtime..."></textarea>
+                                        </div>
+                                        <button class="btn btn-success" onclick="recordOvertime()">
+                                            <i class="fas fa-clock me-1"></i><strong>Record Overtime</strong>
+                                        </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="card border-warning shadow-sm">
+                                            <div class="card-header bg-warning text-dark">
+                                                <h6 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i><strong>Late/Early Tracking</strong></h6>
+                                            </div>
+                                            <div class="card-body">
+                                        <div class="mb-3">
+                                            <label class="form-label">Employee:</label>
+                                            <select class="form-select" id="violation-employee-select">
+                                                <option value="">Choose employee...</option>
+                                            </select>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Date Range:</label>
+                                            <div class="row g-2">
+                                                <div class="col-6">
+                                                    <input type="date" class="form-control" id="violation-start-date">
+                                                </div>
+                                                <div class="col-6">
+                                                    <input type="date" class="form-control" id="violation-end-date">
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Violation Type:</label>
+                                            <select class="form-select" id="violation-type">
+                                                <option value="all">All Violations</option>
+                                                <option value="late_checkin">Late Check-in</option>
+                                                <option value="early_checkout">Early Check-out</option>
+                                                <option value="missed_checkin">Missed Check-in</option>
+                                                <option value="missed_checkout">Missed Check-out</option>
+                                            </select>
+                                        </div>
+                                        <button class="btn btn-warning w-100 mb-2" onclick="generateViolationReport()">
+                                            <i class="fas fa-exclamation-triangle me-1"></i>Generate Report
+                                        </button>
+                                        <button class="btn btn-outline-info w-100" onclick="markViolationExcused()">
+                                            <i class="fas fa-check me-1"></i>Mark as Excused
+                                        </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Manager Controls (Only visible to managers) -->
+                <div class="row mb-4" id="manager-controls" style="display: none;">
+                    <div class="col-12">
+                        <div class="card border-warning shadow">
+                            <div class="card-header bg-warning text-dark">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-user-tie me-2"></i>
+                                    📊 MANAGER CONTROLS - Attendance Monitoring
+                                </h5>
+                                <small>Manager access to attendance tracking and reporting</small>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <h6>Late/Early Tracking</h6>
+                                        <div class="mb-3">
+                                            <label class="form-label">Employee:</label>
+                                            <select class="form-select" id="manager-violation-employee-select">
+                                                <option value="">All Employees</option>
+                                            </select>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Date Range:</label>
+                                            <div class="row g-2">
+                                                <div class="col-6">
+                                                    <input type="date" class="form-control" id="manager-violation-start-date">
+                                                </div>
+                                                <div class="col-6">
+                                                    <input type="date" class="form-control" id="manager-violation-end-date">
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Violation Type:</label>
+                                            <select class="form-select" id="manager-violation-type">
+                                                <option value="all">All Violations</option>
+                                                <option value="late_checkin">Late Check-in</option>
+                                                <option value="early_checkout">Early Check-out</option>
+                                                <option value="missed_checkin">Missed Check-in</option>
+                                                <option value="missed_checkout">Missed Check-out</option>
+                                            </select>
+                                        </div>
+                                        <button class="btn btn-warning w-100 mb-2" onclick="generateManagerViolationReport()">
+                                            <i class="fas fa-exclamation-triangle me-1"></i>Generate Report
+                                        </button>
+                                        <div class="alert alert-info mt-3">
+                                            <small><i class="fas fa-info-circle me-1"></i>
+                                            <strong>Manager Access:</strong> You can view violation reports but cannot modify attendance policies or excuse violations. Contact an administrator for policy changes.</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <h6>Current Attendance Policy</h6>
+                                        <div id="manager-policy-display" class="bg-light p-3 rounded">
+                                            <div class="row g-2">
+                                                <div class="col-6">
+                                                    <small class="text-muted">Morning Hours:</small><br>
+                                                    <strong id="policy-morning-hours">09:00 - 12:00</strong>
+                                                </div>
+                                                <div class="col-6">
+                                                    <small class="text-muted">Afternoon Hours:</small><br>
+                                                    <strong id="policy-afternoon-hours">13:00 - 17:00</strong>
+                                                </div>
+                                                <div class="col-6">
+                                                    <small class="text-muted">Late Tolerance:</small><br>
+                                                    <strong id="policy-late-tolerance">15 minutes</strong>
+                                                </div>
+                                                <div class="col-6">
+                                                    <small class="text-muted">Early Tolerance:</small><br>
+                                                    <strong id="policy-early-tolerance">15 minutes</strong>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <h6 class="mt-4">Quick Stats (This Month)</h6>
+                                        <div id="manager-stats" class="bg-light p-3 rounded">
+                                            <div class="row g-2">
+                                                <div class="col-6">
+                                                    <small class="text-muted">Total Violations:</small><br>
+                                                    <strong id="stats-total-violations" class="text-danger">0</strong>
+                                                </div>
+                                                <div class="col-6">
+                                                    <small class="text-muted">Late Check-ins:</small><br>
+                                                    <strong id="stats-late-checkins" class="text-warning">0</strong>
+                                                </div>
+                                                <div class="col-6">
+                                                    <small class="text-muted">Early Check-outs:</small><br>
+                                                    <strong id="stats-early-checkouts" class="text-warning">0</strong>
+                                                </div>
+                                                <div class="col-6">
+                                                    <small class="text-muted">Missed Records:</small><br>
+                                                    <strong id="stats-missed-records" class="text-danger">0</strong>
+                                                </div>
+                                            </div>
+                                            <button class="btn btn-outline-primary btn-sm mt-2 w-100" onclick="refreshManagerStats()">
+                                                <i class="fas fa-sync me-1"></i>Refresh Stats
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Attendance History -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0"><i class="fas fa-history me-2"></i>Attendance History</h5>
+                                <div class="d-flex gap-2">
+                                    <input type="date" class="form-control form-control-sm" id="startDate" onchange="loadAttendanceHistory()">
+                                    <input type="date" class="form-control form-control-sm" id="endDate" onchange="loadAttendanceHistory()">
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>Date</th>
+                                                <th>Morning In</th>
+                                                <th>Morning Out</th>
+                                                <th>Afternoon In</th>
+                                                <th>Afternoon Out</th>
+                                                <th>Total Hours</th>
+                                                <th>Overtime</th>
+                                                <th>Violations</th>
+                                                <th>Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="attendance-history">
+                                            <tr>
+                                                <td colspan="8" class="text-center">Loading attendance history...</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Monthly Summary -->
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="card border-left-success">
+                            <div class="card-body">
+                                <div class="text-success">Present Days</div>
+                                <div class="h4" id="present-days">0</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card border-left-info">
+                            <div class="card-body">
+                                <div class="text-info">Total Hours</div>
+                                <div class="h4" id="total-hours">0.0</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card border-left-warning">
+                            <div class="card-body">
+                                <div class="text-warning">Overtime Hours</div>
+                                <div class="h4" id="overtime-hours">0.0</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card border-left-danger">
+                            <div class="card-body">
+                                <div class="text-danger">Absent Days</div>
+                                <div class="h4" id="absent-days">0</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="/assets/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/js/config.js"></script>
+    <script src="assets/js/attendance.js"></script>
+    <script>
+        let currentUser = null;
+
+        // Alert function for showing notifications
+        function showAlert(type, message) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+            alertDiv.style.cssText = 'top: 70px; right: 20px; z-index: 9999; min-width: 300px;';
+            alertDiv.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            
+            document.body.appendChild(alertDiv);
+            
+            // Auto remove after 5 seconds
+            setTimeout(() => {
+                if (alertDiv.parentNode) {
+                    alertDiv.parentNode.removeChild(alertDiv);
+                }
+            }, 5000);
+        }
+
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Set current date
+            document.getElementById('current-date').textContent = new Date().toLocaleDateString();
+            
+            // Set default date range (current month)
+            const now = new Date();
+            const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+            const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+            
+            document.getElementById('startDate').value = firstDay.toISOString().split('T')[0];
+            document.getElementById('endDate').value = lastDay.toISOString().split('T')[0];
+            
+            // Set default dates for admin controls
+            document.getElementById('admin-date-select').value = now.toISOString().split('T')[0];
+            document.getElementById('overtime-date').value = now.toISOString().split('T')[0];
+            
+            // Set default date range for violations (current month)
+            document.getElementById('violation-start-date').value = firstDay.toISOString().split('T')[0];
+            
+            // Debug: Check if attendance buttons are visible
+            console.log('🔍 DEBUG: Checking attendance buttons visibility...');
+            const attendanceActions = document.getElementById('attendance-actions');
+            const buttons = document.querySelectorAll('#attendance-actions .btn');
+            
+            console.log('Attendance actions element:', attendanceActions);
+            console.log('Attendance actions display:', window.getComputedStyle(attendanceActions).display);
+            console.log('Attendance actions visibility:', window.getComputedStyle(attendanceActions).visibility);
+            console.log('Number of buttons found:', buttons.length);
+            
+            buttons.forEach((btn, index) => {
+                console.log(`Button ${index + 1}:`, btn.textContent.trim());
+                console.log(`Button ${index + 1} display:`, window.getComputedStyle(btn).display);
+                console.log(`Button ${index + 1} visibility:`, window.getComputedStyle(btn).visibility);
+            });
+            
+            // Force show attendance actions if hidden
+            if (attendanceActions) {
+                attendanceActions.style.display = 'block';
+                attendanceActions.style.visibility = 'visible';
+                attendanceActions.style.opacity = '1';
+                console.log('✅ Forced attendance actions to be visible');
+            }
+            
+            // Mobile detection and debugging
+            const isMobile = window.innerWidth <= 768;
+            console.log('📱 Is mobile device:', isMobile);
+            console.log('📱 Screen width:', window.innerWidth);
+            console.log('📱 Screen height:', window.innerHeight);
+            
+            if (isMobile) {
+                console.log('📱 Mobile device detected - applying mobile fixes...');
+                
+                // Force mobile styles
+                buttons.forEach((btn, index) => {
+                    btn.style.display = 'block';
+                    btn.style.width = '100%';
+                    btn.style.minHeight = '60px';
+                    btn.style.fontSize = '1rem';
+                    btn.style.padding = '1rem';
+                    btn.style.marginBottom = '0.75rem';
+                    btn.style.visibility = 'visible';
+                    btn.style.opacity = '1';
+                });
+                
+                // Show a temporary alert for debugging
+                setTimeout(() => {
+                    if (buttons.length > 0) {
+                        showAlert('✅ Mobile attendance buttons loaded successfully!', 'success');
+                    } else {
+                        showAlert('⚠️ Mobile attendance buttons not found - please refresh the page', 'warning');
+                    }
+                }, 1000);
+            }
+            document.getElementById('violation-end-date').value = lastDay.toISOString().split('T')[0];
+            
+            // Set default date range for manager violations (current month)
+            if (document.getElementById('manager-violation-start-date')) {
+                document.getElementById('manager-violation-start-date').value = firstDay.toISOString().split('T')[0];
+                document.getElementById('manager-violation-end-date').value = lastDay.toISOString().split('T')[0];
+            }
+            
+            // Initialize time display
+            updateLiveTimeAndStatus();
+            
+            // Load user data
+            try {
+                const response = await fetchApi('/api/user');
+                if (response.ok) {
+                    currentUser = await response.json();
+                    console.log('Current user loaded:', currentUser);
+                    
+                    // Show navigation items based on user role
+                    if (currentUser.role === 'admin') {
+                        console.log('User is admin - showing admin controls');
+                        // Admin sees all navigation items and admin controls
+                        document.getElementById('employees-nav').style.display = 'block';
+                        document.getElementById('departments-nav').style.display = 'block';
+                        document.getElementById('reports-nav').style.display = 'block';
+                        document.getElementById('id-badges-nav').style.display = 'block';
+                        
+                        // Show mobile admin navigation
+                        // (Mobile navigation removed)
+                        
+                        const adminControlsElement = document.getElementById('admin-controls');
+                        const adminStatusElement = document.getElementById('admin-status');
+                        const adminNotificationElement = document.getElementById('admin-notification');
+                        
+                        if (adminControlsElement) {
+                            adminControlsElement.style.display = 'block';
+                            console.log('Admin controls element found and made visible');
+                        } else {
+                            console.error('Admin controls element not found!');
+                        }
+                        
+                        if (adminStatusElement) {
+                            adminStatusElement.style.display = 'block';
+                        }
+                        
+                        if (adminNotificationElement) {
+                            adminNotificationElement.style.display = 'block';
+                        }
+                        
+                        // Load employees for admin controls
+                        loadEmployeesForAdmin();
+                        // Load current attendance policy values
+                        loadCurrentAttendancePolicy();
+                    } else if (currentUser.role === 'manager') {
+                        console.log('User is manager - showing manager controls');
+                        // Manager sees employees, departments, reports, ID badges, and manager controls
+                        document.getElementById('employees-nav').style.display = 'block';
+                        document.getElementById('departments-nav').style.display = 'block';
+                        document.getElementById('reports-nav').style.display = 'block';
+                        document.getElementById('id-badges-nav').style.display = 'block';
+                        
+                        // Show mobile admin navigation for managers too
+                        // (Mobile navigation removed)
+                        
+                        const managerControlsElement = document.getElementById('manager-controls');
+                        const managerNotificationElement = document.getElementById('manager-notification');
+                        const managerStatusElement = document.getElementById('manager-status');
+                        
+                        if (managerControlsElement) {
+                            managerControlsElement.style.display = 'block';
+                            console.log('Manager controls element found and made visible');
+                        } else {
+                            console.error('Manager controls element not found!');
+                        }
+                        
+                        if (managerNotificationElement) {
+                            managerNotificationElement.style.display = 'block';
+                        }
+                        
+                        if (managerStatusElement) {
+                            managerStatusElement.style.display = 'block';
+                        }
+                        
+                        // Load employees for manager controls
+                        loadEmployeesForManager();
+                        // Load current policy for display
+                        loadPolicyForManager();
+                        // Load quick stats
+                        refreshManagerStats();
+                    } else if (currentUser.role === 'employee') {
+                        console.log('User is employee - showing basic navigation');
+                        // Employees can see basic navigation items
+                        // Note: They're already on the attendance page, but they should see the nav
+                        // Employees don't need access to employees, departments, reports, or ID badges
+                        // They can only manage their own attendance
+                        
+                        console.log('Employee navigation setup complete');
+                        
+                        // Update mobile navigation for employees (show only basic items)
+                        updateMobileNavigation('employee');
+                    }
+                    
+                    // Update mobile navigation based on role
+                    if (currentUser.role === 'admin') {
+                        updateMobileNavigation('admin');
+                    } else if (currentUser.role === 'manager') {
+                        updateMobileNavigation('manager');
+                    }
+                    
+                    // Note: All users can see Dashboard and Attendance (current page)
+                    
+                    loadTodayStatus();
+                    
+                    // Add a small delay to ensure user data is fully loaded
+                    setTimeout(() => {
+                        loadAttendanceHistory();
+                        loadMonthlySummary();
+                    }, 100);
+                } else {
+                    window.location.href = window.configManager.getServerUrl() + '/login';
+                }
+            } catch (error) {
+                console.error('Error loading user data:', error);
+                window.location.href = window.configManager.getServerUrl() + '/login';
+            }
+        });
+
+        async function loadTodayStatus() {
+            try {
+                const response = await fetchApi('/api/attendance/today');
+                if (response.ok) {
+                    const result = await response.json();
+                    const data = result.data;
+                    
+                    if (data) {
+                        document.getElementById('morning-in').textContent = formatTime(data.morning_checkin);
+                        document.getElementById('morning-out').textContent = formatTime(data.morning_checkout);
+                        document.getElementById('afternoon-in').textContent = formatTime(data.afternoon_checkin);
+                        document.getElementById('afternoon-out').textContent = formatTime(data.afternoon_checkout);
+                        
+                        // Update button states based on current status
+                        updateAttendanceButtons(data);
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading today status:', error);
+            }
+        }
+
+        function updateAttendanceButtons(data) {
+            // Get all attendance buttons
+            const morningInBtn = document.querySelector('button[onclick="checkIn(\'morning\')"]');
+            const morningOutBtn = document.querySelector('button[onclick="checkOut(\'morning\')"]');
+            const afternoonInBtn = document.querySelector('button[onclick="checkIn(\'afternoon\')"]');
+            const afternoonOutBtn = document.querySelector('button[onclick="checkOut(\'afternoon\')"]');
+            
+            // Reset all buttons first
+            [morningInBtn, morningOutBtn, afternoonInBtn, afternoonOutBtn].forEach(btn => {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.classList.remove('disabled');
+                    btn.title = ''; // Clear any existing tooltips
+                }
+            });
+            
+            // Apply workflow rules
+            
+            // Rule 1: If already checked in, disable check-in button
+            if (data.morning_checkin) {
+                morningInBtn.disabled = true;
+                morningInBtn.classList.add('disabled');
+                morningInBtn.title = `Already checked in at ${data.morning_checkin}`;
+            }
+            
+            if (data.afternoon_checkin) {
+                afternoonInBtn.disabled = true;
+                afternoonInBtn.classList.add('disabled');
+                afternoonInBtn.title = `Already checked in at ${data.afternoon_checkin}`;
+            }
+            
+            // Rule 2: If already checked out, disable check-out button
+            if (data.morning_checkout) {
+                morningOutBtn.disabled = true;
+                morningOutBtn.classList.add('disabled');
+                morningOutBtn.title = `Already checked out at ${data.morning_checkout}`;
+            }
+            
+            if (data.afternoon_checkout) {
+                afternoonOutBtn.disabled = true;
+                afternoonOutBtn.classList.add('disabled');
+                afternoonOutBtn.title = `Already checked out at ${data.afternoon_checkout}`;
+            }
+            
+            // Rule 3: Cannot check out unless checked in first
+            if (!data.morning_checkin) {
+                morningOutBtn.disabled = true;
+                morningOutBtn.classList.add('disabled');
+                morningOutBtn.title = 'Must check in first before checking out';
+            }
+            
+            if (!data.afternoon_checkin) {
+                afternoonOutBtn.disabled = true;
+                afternoonOutBtn.classList.add('disabled');
+                afternoonOutBtn.title = 'Must check in first before checking out';
+            }
+            
+            // Rule 4: Allow afternoon check-in even without morning session, but not if morning is in progress
+            if (data.morning_checkin && !data.morning_checkout) {
+                afternoonInBtn.disabled = true;
+                afternoonInBtn.classList.add('disabled');
+                afternoonInBtn.title = `Must check out from morning first (checked in at ${data.morning_checkin})`;
+            } else {
+                // Afternoon check-in is allowed even without morning session
+                if (!data.morning_checkin) {
+                    afternoonInBtn.title = 'Check in for afternoon session (morning session can be skipped)';
+                }
+            }
+            
+            // Rule 5: Time-based restrictions
+            applyTimeRestrictions([morningInBtn, morningOutBtn, afternoonInBtn, afternoonOutBtn]);
+            
+            // Add visual indicators for workflow status
+            updateWorkflowStatus(data);
+        }
+        
+        function updateWorkflowStatus(data) {
+            // Add workflow status indicators
+            const statusElement = document.getElementById('today-status');
+            if (!statusElement) return;
+            
+            // Add workflow guidance
+            let workflowHTML = '<div class="mt-3 p-2 bg-info text-white rounded"><h6>Workflow Status:</h6>';
+            
+            if (!data.morning_checkin && !data.afternoon_checkin) {
+                workflowHTML += '<small><i class="fas fa-info-circle me-1"></i>You can start with either Morning or Afternoon session</small>';
+            } else if (!data.morning_checkin && data.afternoon_checkin && !data.afternoon_checkout) {
+                workflowHTML += '<small><i class="fas fa-arrow-right me-1"></i>Next: Afternoon Check-out (Morning session skipped)</small>';
+            } else if (data.morning_checkin && !data.morning_checkout) {
+                workflowHTML += '<small><i class="fas fa-arrow-right me-1"></i>Next: Morning Check-out</small>';
+            } else if (data.morning_checkin && data.morning_checkout && !data.afternoon_checkin) {
+                workflowHTML += '<small><i class="fas fa-arrow-right me-1"></i>Next: Afternoon Check-in (optional)</small>';
+            } else if (data.afternoon_checkin && !data.afternoon_checkout) {
+                workflowHTML += '<small><i class="fas fa-arrow-right me-1"></i>Next: Afternoon Check-out</small>';
+            } else if ((data.morning_checkin && data.morning_checkout) || (data.afternoon_checkin && data.afternoon_checkout)) {
+                if (data.morning_checkin && data.morning_checkout && data.afternoon_checkin && data.afternoon_checkout) {
+                    workflowHTML += '<small><i class="fas fa-check me-1"></i>All sessions completed for today!</small>';
+                } else if (data.morning_checkin && data.morning_checkout) {
+                    workflowHTML += '<small><i class="fas fa-check me-1"></i>Morning session completed. Afternoon is optional.</small>';
+                } else if (data.afternoon_checkin && data.afternoon_checkout) {
+                    workflowHTML += '<small><i class="fas fa-check me-1"></i>Afternoon session completed. Morning was skipped.</small>';
+                }
+            }
+            
+            workflowHTML += '</div>';
+            
+            // Remove existing workflow status if any
+            const existingWorkflow = statusElement.querySelector('.bg-info');
+            if (existingWorkflow) {
+                existingWorkflow.remove();
+            }
+            
+            // Add new workflow status
+            statusElement.insertAdjacentHTML('beforeend', workflowHTML);
+        }
+
+        async function loadAttendanceHistory() {
+            console.log('🔄 loadAttendanceHistory called');
+            
+            // Check if user is authenticated
+            if (!currentUser) {
+                console.log('⚠️ No current user, skipping attendance history load');
+                return;
+            }
+            
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            
+            console.log('📅 Date range:', { startDate, endDate });
+            console.log('👤 Current user:', currentUser);
+            
+            try {
+                let url = '/api/attendance/history';
+                if (startDate && endDate) {
+                    url += `?start_date=${startDate}&end_date=${endDate}`;
+                }
+                
+                console.log('🌐 Fetching URL:', url);
+                
+                const response = await fetch(url);
+                console.log('📡 Response status:', response.status);
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log('📊 API Response:', result);
+                    
+                    if (result.success && result.data) {
+                        console.log(`✅ Successfully loaded ${result.data.length} attendance records`);
+                        displayAttendanceHistory(result.data);
+                    } else {
+                        console.error('❌ Invalid response format:', result);
+                        document.getElementById('attendance-history').innerHTML = 
+                            '<tr><td colspan="9" class="text-center text-danger">Invalid response format</td></tr>';
+                    }
+                } else {
+                    const errorText = await response.text();
+                    console.error('❌ Failed to load attendance history:', response.status, response.statusText, errorText);
+                    document.getElementById('attendance-history').innerHTML = 
+                        '<tr><td colspan="9" class="text-center text-danger">Failed to load attendance history (Status: ' + response.status + ')</td></tr>';
+                }
+            } catch (error) {
+                console.error('❌ Error loading attendance history:', error);
+                document.getElementById('attendance-history').innerHTML = 
+                    '<tr><td colspan="9" class="text-center text-danger">Error loading attendance history: ' + error.message + '</td></tr>';
+            }
+        }
+
+        function displayAttendanceHistory(records) {
+            console.log('📋 displayAttendanceHistory called with', records.length, 'records');
+            
+            const tbody = document.getElementById('attendance-history');
+            
+            if (!tbody) {
+                console.error('❌ attendance-history element not found!');
+                return;
+            }
+            
+            if (records.length === 0) {
+                console.log('📝 No records to display');
+                tbody.innerHTML = '<tr><td colspan="9" class="text-center">No attendance records found</td></tr>';
+                return;
+            }
+
+            console.log('🎨 Rendering', records.length, 'records');
+            
+            try {
+                tbody.innerHTML = records.map(record => {
+                    // Add safety checks for required fields
+                    if (!record) {
+                        console.warn('⚠️ Null record found, skipping');
+                        return '';
+                    }
+                    
+                    const violations = getViolationIndicators(record);
+                    
+                    return `
+                    <tr>
+                        <td>${record.date ? formatDate(record.date) : 'N/A'}</td>
+                        <td>${formatTimeWithIndicator(record.morning_checkin, 'morning_in', record)}</td>
+                        <td>${formatTimeWithIndicator(record.morning_checkout, 'morning_out', record)}</td>
+                        <td>${formatTimeWithIndicator(record.afternoon_checkin, 'afternoon_in', record)}</td>
+                        <td>${formatTimeWithIndicator(record.afternoon_checkout, 'afternoon_out', record)}</td>
+                        <td>${record.total_hours || 0} hrs</td>
+                        <td>
+                            ${record.overtime_hours ? 
+                                `<span class="text-warning">${record.overtime_hours} hrs</span>` + 
+                                (record.overtime_reason ? `<br><small class="text-muted">${escapeHtml(record.overtime_reason)}</small>` : '') 
+                                : '0 hrs'}
+                        </td>
+                        <td>${violations}</td>
+                        <td>
+                            <span class="badge bg-${getStatusColor(record.status || 'unknown')}">
+                                ${record.status || 'Unknown'}
+                            </span>
+                            ${currentUser && currentUser.role === 'admin' ? 
+                                `<br><button class="btn btn-sm btn-outline-primary mt-1" onclick="editAttendanceRecord(${record.id || 0})">
+                                    <i class="fas fa-edit"></i>
+                                </button>` : ''}
+                        </td>
+                    </tr>
+                `;
+                }).filter(row => row !== '').join('');
+                
+                console.log('✅ Successfully rendered attendance history table');
+            } catch (error) {
+                console.error('❌ Error rendering attendance history:', error);
+                tbody.innerHTML = '<tr><td colspan="9" class="text-center text-danger">Error rendering attendance history</td></tr>';
+            }
+        }
+
+        function formatTimeWithIndicator(time, type, record) {
+            if (!time) return '--:--';
+            
+            const formattedTime = formatTime(time);
+            const indicator = getTimeIndicator(time, type, record);
+            
+            return `${formattedTime}${indicator}`;
+        }
+
+        // Helper function to convert time string to minutes
+        function timeToMinutes(timeStr) {
+            if (!timeStr) return 0;
+            const [hours, minutes] = timeStr.split(':').map(Number);
+            return hours * 60 + minutes;
+        }
+
+        // Helper function to escape HTML to prevent XSS
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function getTimeIndicator(time, type, record) {
+            // Default policy (can be loaded from server)
+            const policy = {
+                morning_start: '08:00',
+                morning_end: '12:00',
+                afternoon_start: '13:00',
+                afternoon_end: '17:00',
+                late_tolerance: 15,
+                early_tolerance: 15
+            };
+
+            if (!time) return '';
+
+            const actualMinutes = timeToMinutes(time);
+            let expectedMinutes, tolerance, isLate = false, isEarly = false;
+
+            switch(type) {
+                case 'morning_in':
+                    expectedMinutes = timeToMinutes(policy.morning_start);
+                    tolerance = policy.late_tolerance;
+                    isLate = actualMinutes > (expectedMinutes + tolerance);
+                    break;
+                case 'morning_out':
+                    expectedMinutes = timeToMinutes(policy.morning_end);
+                    tolerance = policy.early_tolerance;
+                    isEarly = actualMinutes < (expectedMinutes - tolerance);
+                    break;
+                case 'afternoon_in':
+                    expectedMinutes = timeToMinutes(policy.afternoon_start);
+                    tolerance = policy.late_tolerance;
+                    isLate = actualMinutes > (expectedMinutes + tolerance);
+                    break;
+                case 'afternoon_out':
+                    expectedMinutes = timeToMinutes(policy.afternoon_end);
+                    tolerance = policy.early_tolerance;
+                    isEarly = actualMinutes < (expectedMinutes - tolerance);
+                    break;
+            }
+
+            if (isLate) {
+                const diff = actualMinutes - expectedMinutes;
+                return ` <span class="badge bg-danger ms-1" title="Late by ${diff} minutes">L</span>`;
+            } else if (isEarly) {
+                const diff = expectedMinutes - actualMinutes;
+                return ` <span class="badge bg-warning ms-1" title="Early by ${diff} minutes">E</span>`;
+            }
+
+            return '';
+        }
+
+        function getViolationIndicators(record) {
+            const violations = [];
+            
+            // Check for missing check-ins/outs
+            if (!record.morning_checkin) violations.push('<span class="badge bg-danger">Missing Morning In</span>');
+            if (!record.morning_checkout) violations.push('<span class="badge bg-warning">Missing Morning Out</span>');
+            if (!record.afternoon_checkin) violations.push('<span class="badge bg-danger">Missing Afternoon In</span>');
+            if (!record.afternoon_checkout) violations.push('<span class="badge bg-warning">Missing Afternoon Out</span>');
+            
+            // Check for late/early violations (using indicators from time fields)
+            const hasLateIn = (record.morning_checkin && getTimeIndicator(record.morning_checkin, 'morning_in', record).includes('L')) ||
+                             (record.afternoon_checkin && getTimeIndicator(record.afternoon_checkin, 'afternoon_in', record).includes('L'));
+            
+            const hasEarlyOut = (record.morning_checkout && getTimeIndicator(record.morning_checkout, 'morning_out', record).includes('E')) ||
+                               (record.afternoon_checkout && getTimeIndicator(record.afternoon_checkout, 'afternoon_out', record).includes('E'));
+            
+            if (hasLateIn) violations.push('<span class="badge bg-danger">Late Check-in</span>');
+            if (hasEarlyOut) violations.push('<span class="badge bg-warning">Early Check-out</span>');
+            
+            return violations.length > 0 ? violations.join('<br>') : '<span class="text-success">No Violations</span>';
+        }
+
+        async function loadMonthlySummary() {
+            try {
+                const now = new Date();
+                const response = await fetch(`/api/attendance?action=stats&month=${now.getMonth() + 1}&year=${now.getFullYear()}`);
+                if (response.ok) {
+                    const result = await response.json();
+                    const stats = result.data;
+                    
+                    document.getElementById('present-days').textContent = stats.present_days || 0;
+                    document.getElementById('total-hours').textContent = (stats.total_hours || 0).toFixed(1);
+                    document.getElementById('overtime-hours').textContent = (stats.total_overtime || 0).toFixed(1);
+                    document.getElementById('absent-days').textContent = stats.absent_days || 0;
+                }
+            } catch (error) {
+                console.error('Error loading monthly summary:', error);
+            }
+        }
+
+        function formatTime(time) {
+            return time ? new Date('1970-01-01T' + time).toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            }) : '--:--';
+        }
+
+        function formatDate(date) {
+            return new Date(date).toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            });
+        }
+
+        function getStatusColor(status) {
+            switch (status) {
+                case 'present': return 'success';
+                case 'partial': return 'warning';
+                case 'absent': return 'danger';
+                default: return 'secondary';
+            }
+        }
+
+        async function logout() {
+            try {
+                await fetchApi('/api/logout', { method: 'POST' });
+                window.location.href = window.configManager.getServerUrl() + '/';
+            } catch (error) {
+                console.error('Logout error:', error);
+                window.location.href = window.configManager.getServerUrl() + '/';
+            }
+        }
+
+        // Admin Functions
+        async function loadEmployeesForAdmin() {
+            console.log('Loading employees for admin controls...');
+            try {
+                const response = await fetchApi('/api/employees');
+                console.log('Employees API response status:', response.status);
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    const employees = result.data;
+                    console.log('Loaded employees:', employees.length);
+                    
+                    // Populate all employee select dropdowns
+                    const adminSelect = document.getElementById('admin-employee-select');
+                    const overtimeSelect = document.getElementById('overtime-employee-select');
+                    const violationSelect = document.getElementById('violation-employee-select');
+                    
+                    if (!adminSelect) {
+                        console.error('admin-employee-select element not found!');
+                        return;
+                    }
+                    if (!overtimeSelect) {
+                        console.error('overtime-employee-select element not found!');
+                        return;
+                    }
+                    if (!violationSelect) {
+                        console.error('violation-employee-select element not found!');
+                        return;
+                    }
+                    
+                    adminSelect.innerHTML = '<option value="">Choose employee...</option>';
+                    overtimeSelect.innerHTML = '<option value="">Choose employee...</option>';
+                    violationSelect.innerHTML = '<option value="">All Employees</option>';
+                    
+                    employees.forEach(emp => {
+                        const option1 = new Option(`${emp.first_name} ${emp.last_name} (${emp.employee_id})`, emp.id);
+                        const option2 = new Option(`${emp.first_name} ${emp.last_name} (${emp.employee_id})`, emp.id);
+                        const option3 = new Option(`${emp.first_name} ${emp.last_name} (${emp.employee_id})`, emp.id);
+                        adminSelect.add(option1);
+                        overtimeSelect.add(option2);
+                        violationSelect.add(option3);
+                    });
+                    
+                    console.log('Employee dropdowns populated successfully');
+                } else {
+                    console.error('Failed to load employees:', response.status);
+                }
+            } catch (error) {
+                console.error('Error loading employees:', error);
+            }
+        }
+
+        async function loadEmployeeAttendance() {
+            const employeeId = document.getElementById('admin-employee-select').value;
+            const date = document.getElementById('admin-date-select').value;
+            
+            if (!employeeId || !date) {
+                document.getElementById('admin-attendance-form').style.display = 'none';
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/attendance/history?start_date=${date}&end_date=${date}`);
+                if (response.ok) {
+                    const result = await response.json();
+                    const records = result.data.filter(record => record.employee_id == employeeId && record.date === date);
+                    
+                    if (records.length > 0) {
+                        const record = records[0];
+                        document.getElementById('admin-morning-in').value = timeToInputFormat(record.morning_checkin);
+                        document.getElementById('admin-morning-out').value = timeToInputFormat(record.morning_checkout);
+                        document.getElementById('admin-afternoon-in').value = timeToInputFormat(record.afternoon_checkin);
+                        document.getElementById('admin-afternoon-out').value = timeToInputFormat(record.afternoon_checkout);
+                        
+                        // Store record ID for updates
+                        document.getElementById('admin-attendance-form').dataset.recordId = record.id;
+                    } else {
+                        // Clear form for new record
+                        document.getElementById('admin-morning-in').value = '';
+                        document.getElementById('admin-morning-out').value = '';
+                        document.getElementById('admin-afternoon-in').value = '';
+                        document.getElementById('admin-afternoon-out').value = '';
+                        document.getElementById('admin-attendance-form').dataset.recordId = '';
+                    }
+                    
+                    document.getElementById('admin-attendance-form').style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Error loading employee attendance:', error);
+            }
+        }
+
+        async function updateAttendanceTimes() {
+            const employeeId = document.getElementById('admin-employee-select').value;
+            const date = document.getElementById('admin-date-select').value;
+            const recordId = document.getElementById('admin-attendance-form').dataset.recordId;
+            
+            if (!employeeId || !date) {
+                alert('Please select an employee and date');
+                return;
+            }
+            
+            const attendanceData = {
+                morning_checkin: document.getElementById('admin-morning-in').value || null,
+                morning_checkout: document.getElementById('admin-morning-out').value || null,
+                afternoon_checkin: document.getElementById('admin-afternoon-in').value || null,
+                afternoon_checkout: document.getElementById('admin-afternoon-out').value || null
+            };
+            
+            try {
+                let response;
+                if (recordId) {
+                    // Update existing record
+                    response = await fetch(`/api/attendance/${recordId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(attendanceData)
+                    });
+                } else {
+                    // Create new record
+                    const employee = await getEmployeeById(employeeId);
+                    const newRecord = {
+                        employee_id: parseInt(employeeId),
+                        employee_name: employee ? `${employee.first_name} ${employee.last_name}` : 'Unknown',
+                        date: date,
+                        ...attendanceData,
+                        status: 'present'
+                    };
+                    
+                    response = await fetchApi('/api/attendance/create', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(newRecord)
+                    });
+                }
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    alert('Attendance times updated successfully!');
+                    loadAttendanceHistory();
+                    loadEmployeeAttendance(); // Refresh the form
+                } else {
+                    const error = await response.json();
+                    alert('Error: ' + error.error);
+                }
+            } catch (error) {
+                console.error('Error updating attendance:', error);
+                alert('Failed to update attendance times');
+            }
+        }
+
+        async function recordOvertime() {
+            const employeeId = document.getElementById('overtime-employee-select').value;
+            const date = document.getElementById('overtime-date').value;
+            const hours = document.getElementById('overtime-hours').value;
+            const reason = document.getElementById('overtime-reason').value;
+            
+            if (!employeeId || !date || !hours) {
+                alert('Please fill in all required fields');
+                return;
+            }
+            
+            if (parseFloat(hours) <= 0) {
+                alert('Overtime hours must be greater than 0');
+                return;
+            }
+            
+            const overtimeData = {
+                employee_id: parseInt(employeeId),
+                date: date,
+                overtime_hours: parseFloat(hours),
+                overtime_reason: reason
+            };
+            
+            try {
+                const response = await fetchApi('/api/attendance/overtime', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(overtimeData)
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    alert(result.message);
+                    
+                    // Clear form
+                    document.getElementById('overtime-employee-select').value = '';
+                    document.getElementById('overtime-hours').value = '';
+                    document.getElementById('overtime-reason').value = '';
+                    
+                    loadAttendanceHistory();
+                    loadMonthlySummary();
+                } else {
+                    const error = await response.json();
+                    alert('Error: ' + error.error);
+                }
+            } catch (error) {
+                console.error('Error recording overtime:', error);
+                alert('Failed to record overtime');
+            }
+        }
+
+        // Helper functions
+        function timeToInputFormat(timeStr) {
+            if (!timeStr) return '';
+            // Convert HH:MM to input format
+            return timeStr;
+        }
+
+        async function getEmployeeById(employeeId) {
+            try {
+                const response = await fetchApi('/api/employees');
+                if (response.ok) {
+                    const result = await response.json();
+                    return result.data.find(emp => emp.id == employeeId);
+                }
+            } catch (error) {
+                console.error('Error getting employee:', error);
+            }
+            return null;
+        }
+
+        async function editAttendanceRecord(recordId) {
+            try {
+                // Find the record in current data
+                const response = await fetchApi('/api/attendance/history');
+                if (response.ok) {
+                    const result = await response.json();
+                    const record = result.data.find(r => r.id === recordId);
+                    
+                    if (record) {
+                        // Set the admin form with this record's data
+                        document.getElementById('admin-employee-select').value = record.employee_id;
+                        document.getElementById('admin-date-select').value = record.date;
+                        
+                        // Load the attendance data
+                        await loadEmployeeAttendance();
+                        
+                        // Scroll to admin controls
+                        document.getElementById('admin-controls').scrollIntoView({ behavior: 'smooth' });
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading record for editing:', error);
+                alert('Failed to load record for editing');
+            }
+        }
+
+        // Late/Early Tracking Functions
+        async function saveAttendancePolicy() {
+            // Get the save button and show loading state
+            const saveButton = document.querySelector('button[onclick="saveAttendancePolicy()"]');
+            const originalButtonText = saveButton.innerHTML;
+            saveButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Saving...';
+            saveButton.disabled = true;
+
+            const policy = {
+                morning_start: document.getElementById('morning-start-time').value,
+                morning_end: document.getElementById('morning-end-time').value,
+                afternoon_start: document.getElementById('afternoon-start-time').value,
+                afternoon_end: document.getElementById('afternoon-end-time').value,
+                late_tolerance: parseInt(document.getElementById('late-tolerance').value),
+                early_tolerance: parseInt(document.getElementById('early-tolerance').value)
+            };
+
+            try {
+                console.log('Saving attendance policy:', policy);
+                
+                const response = await fetchApi('/api/attendance/policy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(policy)
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    // Show success message
+                    showAlert('success', '✅ Attendance policy saved successfully!');
+                    
+                    // Refresh displays to show updated policy
+                    loadAttendanceHistory(); // Refresh to show new violations
+                    
+                    // Update manager policy display if visible
+                    if (currentUser && currentUser.role === 'manager') {
+                        loadPolicyForManager();
+                    }
+                    
+                    console.log('Policy saved and displays refreshed');
+                } else {
+                    showAlert('danger', '❌ Failed to save policy: ' + result.error);
+                }
+            } catch (error) {
+                console.error('Error saving policy:', error);
+                showAlert('danger', '❌ Failed to save attendance policy: ' + error.message);
+            } finally {
+                // Restore button state
+                saveButton.innerHTML = originalButtonText;
+                saveButton.disabled = false;
+            }
+        }
+
+        async function generateViolationReport() {
+            const employeeId = document.getElementById('violation-employee-select').value;
+            const startDate = document.getElementById('violation-start-date').value;
+            const endDate = document.getElementById('violation-end-date').value;
+            const violationType = document.getElementById('violation-type').value;
+
+            if (!startDate || !endDate) {
+                alert('Please select date range');
+                return;
+            }
+
+            try {
+                const params = new URLSearchParams({
+                    start_date: startDate,
+                    end_date: endDate,
+                    violation_type: violationType
+                });
+
+                if (employeeId) {
+                    params.append('employee_id', employeeId);
+                }
+
+                const response = await fetch(`/api/attendance/violations?${params}`);
+                const result = await response.json();
+
+                if (result.success) {
+                    displayViolationReport(result.data);
+                } else {
+                    alert('❌ Failed to generate report: ' + result.error);
+                }
+            } catch (error) {
+                console.error('Error generating report:', error);
+                alert('❌ Failed to generate violation report');
+            }
+        }
+
+        function displayViolationReport(violations) {
+            if (violations.length === 0) {
+                alert('✅ No violations found for the selected criteria!');
+                return;
+            }
+
+            let reportHTML = `
+                <div class="modal fade" id="violationModal" tabindex="-1">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content">
+                            <div class="modal-header bg-warning text-dark">
+                                <h5 class="modal-title">
+                                    <i class="fas fa-exclamation-triangle me-2"></i>
+                                    Attendance Violations Report
+                                </h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="table-responsive">
+                                    <table class="table table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>Employee</th>
+                                                <th>Date</th>
+                                                <th>Violation Type</th>
+                                                <th>Expected Time</th>
+                                                <th>Actual Time</th>
+                                                <th>Difference</th>
+                                                <th>Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+            `;
+
+            violations.forEach(violation => {
+                const statusBadge = violation.excused ? 
+                    '<span class="badge bg-success">Excused</span>' : 
+                    '<span class="badge bg-danger">Violation</span>';
+                
+                reportHTML += `
+                    <tr>
+                        <td>${violation.employee_name}</td>
+                        <td>${formatDate(violation.date)}</td>
+                        <td>${violation.violation_type.replace('_', ' ').toUpperCase()}</td>
+                        <td>${violation.expected_time}</td>
+                        <td>${violation.actual_time || 'N/A'}</td>
+                        <td>${violation.difference_minutes} min</td>
+                        <td>${statusBadge}</td>
+                    </tr>
+                `;
+            });
+
+            reportHTML += `
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="mt-3">
+                                    <strong>Summary:</strong>
+                                    <ul>
+                                        <li>Total Violations: ${violations.length}</li>
+                                        <li>Excused: ${violations.filter(v => v.excused).length}</li>
+                                        <li>Pending: ${violations.filter(v => !v.excused).length}</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                <button type="button" class="btn btn-primary" onclick="exportViolationReport()">
+                                    <i class="fas fa-download me-1"></i>Export CSV
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Remove existing modal if any
+            const existingModal = document.getElementById('violationModal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+
+            // Add modal to page
+            document.body.insertAdjacentHTML('beforeend', reportHTML);
+            
+            // Show modal
+            const modal = new bootstrap.Modal(document.getElementById('violationModal'));
+            modal.show();
+        }
+
+        async function markViolationExcused() {
+            const employeeId = document.getElementById('violation-employee-select').value;
+            const startDate = document.getElementById('violation-start-date').value;
+            const endDate = document.getElementById('violation-end-date').value;
+
+            if (!employeeId || !startDate || !endDate) {
+                alert('Please select employee and date range');
+                return;
+            }
+
+            const reason = prompt('Enter reason for excusing violations:');
+            if (!reason) return;
+
+            try {
+                const response = await fetchApi('/api/attendance/excuse-violations', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        employee_id: parseInt(employeeId),
+                        start_date: startDate,
+                        end_date: endDate,
+                        reason: reason
+                    })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    alert(`✅ ${result.count} violations marked as excused`);
+                    generateViolationReport(); // Refresh report
+                } else {
+                    alert('❌ Failed to excuse violations: ' + result.error);
+                }
+            } catch (error) {
+                console.error('Error excusing violations:', error);
+                alert('❌ Failed to excuse violations');
+            }
+        }
+
+        function calculateViolations(record, policy) {
+            const violations = [];
+            
+            if (!policy) return violations;
+
+            // Check morning late check-in
+            if (record.morning_checkin) {
+                const expectedTime = timeToMinutes(policy.morning_start);
+                const actualTime = timeToMinutes(record.morning_checkin);
+                const difference = actualTime - expectedTime;
+                
+                if (difference > policy.late_tolerance) {
+                    violations.push({
+                        type: 'late_checkin',
+                        session: 'morning',
+                        difference: difference,
+                        severity: difference > 30 ? 'high' : 'medium'
+                    });
+                }
+            }
+
+            // Check morning early check-out
+            if (record.morning_checkout) {
+                const expectedTime = timeToMinutes(policy.morning_end);
+                const actualTime = timeToMinutes(record.morning_checkout);
+                const difference = expectedTime - actualTime;
+                
+                if (difference > policy.early_tolerance) {
+                    violations.push({
+                        type: 'early_checkout',
+                        session: 'morning',
+                        difference: difference,
+                        severity: difference > 30 ? 'high' : 'medium'
+                    });
+                }
+            }
+
+            // Check afternoon late check-in
+            if (record.afternoon_checkin) {
+                const expectedTime = timeToMinutes(policy.afternoon_start);
+                const actualTime = timeToMinutes(record.afternoon_checkin);
+                const difference = actualTime - expectedTime;
+                
+                if (difference > policy.late_tolerance) {
+                    violations.push({
+                        type: 'late_checkin',
+                        session: 'afternoon',
+                        difference: difference,
+                        severity: difference > 30 ? 'high' : 'medium'
+                    });
+                }
+            }
+
+            // Check afternoon early check-out
+            if (record.afternoon_checkout) {
+                const expectedTime = timeToMinutes(policy.afternoon_end);
+                const actualTime = timeToMinutes(record.afternoon_checkout);
+                const difference = expectedTime - actualTime;
+                
+                if (difference > policy.early_tolerance) {
+                    violations.push({
+                        type: 'early_checkout',
+                        session: 'afternoon',
+                        difference: difference,
+                        severity: difference > 30 ? 'high' : 'medium'
+                    });
+                }
+            }
+
+            return violations;
+        }
+
+        // Manager-specific functions
+        async function loadEmployeesForManager() {
+            console.log('Loading employees for manager controls...');
+            try {
+                const response = await fetchApi('/api/employees');
+                console.log('Employees API response status:', response.status);
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    const employees = result.data;
+                    console.log('Loaded employees for manager:', employees.length);
+                    
+                    const managerViolationSelect = document.getElementById('manager-violation-employee-select');
+                    
+                    if (!managerViolationSelect) {
+                        console.error('manager-violation-employee-select element not found!');
+                        return;
+                    }
+                    
+                    managerViolationSelect.innerHTML = '<option value="">All Employees</option>';
+                    
+                    employees.forEach(emp => {
+                        const option = new Option(`${emp.first_name} ${emp.last_name} (${emp.employee_id})`, emp.id);
+                        managerViolationSelect.add(option);
+                    });
+                    
+                    console.log('Manager employee dropdown populated successfully');
+                } else {
+                    console.error('Failed to load employees for manager:', response.status);
+                }
+            } catch (error) {
+                console.error('Error loading employees for manager:', error);
+            }
+        }
+
+        async function loadCurrentAttendancePolicy() {
+            try {
+                console.log('Loading current attendance policy...');
+                const response = await fetchApi('/api/attendance/policy');
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.success && result.data) {
+                        const policy = result.data;
+                        console.log('Loaded attendance policy:', policy);
+                        
+                        // Update admin form fields with current policy values
+                        document.getElementById('morning-start-time').value = policy.morning_start || '08:00';
+                        document.getElementById('morning-end-time').value = policy.morning_end || '12:00';
+                        document.getElementById('afternoon-start-time').value = policy.afternoon_start || '13:00';
+                        document.getElementById('afternoon-end-time').value = policy.afternoon_end || '17:00';
+                        document.getElementById('late-tolerance').value = policy.late_tolerance || 15;
+                        document.getElementById('early-tolerance').value = policy.early_tolerance || 15;
+                        
+                        console.log('Admin form fields updated with current policy');
+                    } else {
+                        console.warn('No policy data received, using defaults');
+                    }
+                } else {
+                    console.error('Failed to load attendance policy:', response.status);
+                }
+            } catch (error) {
+                console.error('Error loading attendance policy:', error);
+            }
+        }
+
+        async function loadPolicyForManager() {
+            try {
+                console.log('Loading policy for manager display...');
+                const response = await fetchApi('/api/attendance/policy');
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.success && result.data) {
+                        const policy = result.data;
+                        console.log('Loaded policy for manager:', policy);
+                        
+                        // Update policy display for managers
+                        document.getElementById('policy-morning-hours').textContent = `${policy.morning_start || '08:00'} - ${policy.morning_end || '12:00'}`;
+                        document.getElementById('policy-afternoon-hours').textContent = `${policy.afternoon_start || '13:00'} - ${policy.afternoon_end || '17:00'}`;
+                        document.getElementById('policy-late-tolerance').textContent = `${policy.late_tolerance || 15} minutes`;
+                        document.getElementById('policy-early-tolerance').textContent = `${policy.early_tolerance || 15} minutes`;
+                    } else {
+                        console.warn('No policy data for manager display, using defaults');
+                        // Use defaults if no policy found
+                        document.getElementById('policy-morning-hours').textContent = '09:00 - 12:00';
+                        document.getElementById('policy-afternoon-hours').textContent = '13:00 - 17:00';
+                        document.getElementById('policy-late-tolerance').textContent = '15 minutes';
+                        document.getElementById('policy-early-tolerance').textContent = '15 minutes';
+                    }
+                } else {
+                    console.error('Failed to load policy for manager:', response.status);
+                }
+            } catch (error) {
+                console.error('Error loading policy for manager:', error);
+            }
+        }
+
+        async function generateManagerViolationReport() {
+            const employeeId = document.getElementById('manager-violation-employee-select').value;
+            const startDate = document.getElementById('manager-violation-start-date').value;
+            const endDate = document.getElementById('manager-violation-end-date').value;
+            const violationType = document.getElementById('manager-violation-type').value;
+
+            if (!startDate || !endDate) {
+                alert('Please select date range');
+                return;
+            }
+
+            try {
+                const params = new URLSearchParams({
+                    start_date: startDate,
+                    end_date: endDate,
+                    violation_type: violationType
+                });
+
+                if (employeeId) {
+                    params.append('employee_id', employeeId);
+                }
+
+                const response = await fetch(`/api/attendance/violations?${params}`);
+                const result = await response.json();
+
+                if (result.success) {
+                    displayManagerViolationReport(result.data);
+                } else {
+                    alert('❌ Failed to generate report: ' + result.error);
+                }
+            } catch (error) {
+                console.error('Error generating manager report:', error);
+                alert('❌ Failed to generate violation report');
+            }
+        }
+
+        function displayManagerViolationReport(violations) {
+            if (violations.length === 0) {
+                alert('✅ No violations found for the selected criteria!');
+                return;
+            }
+
+            let reportHTML = `
+                <div class="modal fade" id="managerViolationModal" tabindex="-1">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content">
+                            <div class="modal-header bg-warning text-dark">
+                                <h5 class="modal-title">
+                                    <i class="fas fa-user-tie me-2"></i>
+                                    Manager Violation Report
+                                </h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="alert alert-info">
+                                    <i class="fas fa-info-circle me-2"></i>
+                                    <strong>Manager View:</strong> You can view violation details but cannot excuse violations. Contact an administrator to excuse violations or modify policies.
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="table table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>Employee</th>
+                                                <th>Date</th>
+                                                <th>Violation Type</th>
+                                                <th>Expected Time</th>
+                                                <th>Actual Time</th>
+                                                <th>Difference</th>
+                                                <th>Severity</th>
+                                                <th>Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+            `;
+
+            violations.forEach(violation => {
+                const statusBadge = violation.excused ? 
+                    '<span class="badge bg-success">Excused</span>' : 
+                    '<span class="badge bg-danger">Violation</span>';
+                
+                const severityBadge = violation.severity === 'high' ? 
+                    '<span class="badge bg-danger">High</span>' : 
+                    '<span class="badge bg-warning">Medium</span>';
+                
+                reportHTML += `
+                    <tr>
+                        <td>${violation.employee_name}</td>
+                        <td>${formatDate(violation.date)}</td>
+                        <td>${violation.violation_type.replace('_', ' ').toUpperCase()}</td>
+                        <td>${violation.expected_time}</td>
+                        <td>${violation.actual_time || 'N/A'}</td>
+                        <td>${violation.difference_minutes || 'N/A'} min</td>
+                        <td>${severityBadge}</td>
+                        <td>${statusBadge}</td>
+                    </tr>
+                `;
+            });
+
+            reportHTML += `
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="mt-3">
+                                    <strong>Summary:</strong>
+                                    <div class="row g-3 mt-2">
+                                        <div class="col-md-3">
+                                            <div class="card border-primary">
+                                                <div class="card-body text-center">
+                                                    <h5 class="text-primary">${violations.length}</h5>
+                                                    <small>Total Violations</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="card border-success">
+                                                <div class="card-body text-center">
+                                                    <h5 class="text-success">${violations.filter(v => v.excused).length}</h5>
+                                                    <small>Excused</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="card border-danger">
+                                                <div class="card-body text-center">
+                                                    <h5 class="text-danger">${violations.filter(v => !v.excused).length}</h5>
+                                                    <small>Pending</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="card border-warning">
+                                                <div class="card-body text-center">
+                                                    <h5 class="text-warning">${violations.filter(v => v.severity === 'high').length}</h5>
+                                                    <small>High Severity</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                <button type="button" class="btn btn-primary" onclick="exportManagerViolationReport()">
+                                    <i class="fas fa-download me-1"></i>Export CSV
+                                </button>
+                                <button type="button" class="btn btn-warning" onclick="sendViolationReportToAdmin()">
+                                    <i class="fas fa-paper-plane me-1"></i>Send Report to Admin
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Remove existing modal if any
+            const existingModal = document.getElementById('managerViolationModal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+
+            // Add modal to page
+            document.body.insertAdjacentHTML('beforeend', reportHTML);
+            
+            // Show modal
+            const modal = new bootstrap.Modal(document.getElementById('managerViolationModal'));
+            modal.show();
+        }
+
+        async function refreshManagerStats() {
+            try {
+                const now = new Date();
+                const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+                const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+                
+                const startDate = firstDay.toISOString().split('T')[0];
+                const endDate = lastDay.toISOString().split('T')[0];
+
+                const response = await fetch(`/api/attendance/violations?start_date=${startDate}&end_date=${endDate}&violation_type=all`);
+                const result = await response.json();
+
+                if (result.success) {
+                    const violations = result.data;
+                    
+                    const totalViolations = violations.length;
+                    const lateCheckins = violations.filter(v => v.violation_type === 'late_checkin').length;
+                    const earlyCheckouts = violations.filter(v => v.violation_type === 'early_checkout').length;
+                    const missedRecords = violations.filter(v => v.violation_type === 'missed_checkin' || v.violation_type === 'missed_checkout').length;
+
+                    document.getElementById('stats-total-violations').textContent = totalViolations;
+                    document.getElementById('stats-late-checkins').textContent = lateCheckins;
+                    document.getElementById('stats-early-checkouts').textContent = earlyCheckouts;
+                    document.getElementById('stats-missed-records').textContent = missedRecords;
+                } else {
+                    console.error('Failed to load manager stats:', result.error);
+                }
+            } catch (error) {
+                console.error('Error refreshing manager stats:', error);
+            }
+        }
+
+        function exportManagerViolationReport() {
+            // This would implement CSV export functionality
+            alert('📊 CSV export functionality would be implemented here.\n\nThis would generate a downloadable CSV file with all violation data for management review.');
+        }
+
+        async function sendViolationReportToAdmin() {
+            try {
+                // Get current violation data from the modal
+                const violationRows = document.querySelectorAll('#managerViolationModal .table tbody tr');
+                const violationData = [];
+                
+                violationRows.forEach(row => {
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length >= 6) {
+                        violationData.push({
+                            employee: cells[0].textContent.trim(),
+                            date: cells[1].textContent.trim(),
+                            type: cells[2].textContent.trim(),
+                            time: cells[3].textContent.trim(),
+                            difference: cells[4].textContent.trim(),
+                            severity: cells[5].textContent.trim()
+                        });
+                    }
+                });
+                
+                if (violationData.length === 0) {
+                    alert('❌ No violation data to send');
+                    return;
+                }
+                
+                // Get date range from the form
+                const startDate = document.getElementById('manager-violation-start-date').value;
+                const endDate = document.getElementById('manager-violation-end-date').value;
+                const employeeSelect = document.getElementById('manager-violation-employee-select');
+                const selectedEmployee = employeeSelect.options[employeeSelect.selectedIndex].text;
+                
+                // Create notification message
+                const title = `Violation Report from Manager`;
+                const message = `Manager has sent a violation report for review:
+                
+📅 Period: ${startDate} to ${endDate}
+👤 Employee(s): ${selectedEmployee}
+📊 Total Violations: ${violationData.length}
+
+Please review the attached violation data and take appropriate action.`;
+                
+                // Send notification to admin
+                const response = await fetchApi('/api/notifications', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        type: 'violation_report',
+                        title: title,
+                        message: message,
+                        recipient_email: 'admin@company.com',
+                        violation_data: {
+                            period: { start: startDate, end: endDate },
+                            employee: selectedEmployee,
+                            violations: violationData,
+                            total_count: violationData.length,
+                            sent_at: new Date().toISOString()
+                        }
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // Show success message
+                    const alertDiv = document.createElement('div');
+                    alertDiv.className = 'alert alert-success alert-dismissible fade show position-fixed';
+                    alertDiv.style.cssText = 'top: 70px; right: 20px; z-index: 9999; min-width: 350px;';
+                    alertDiv.innerHTML = `
+                        <i class="fas fa-check-circle me-2"></i>
+                        <strong>Report Sent Successfully!</strong><br>
+                        The violation report has been sent to the administrator for review.
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    `;
+                    
+                    document.body.appendChild(alertDiv);
+                    
+                    // Auto-remove after 5 seconds
+                    setTimeout(() => {
+                        if (alertDiv.parentNode) {
+                            alertDiv.parentNode.removeChild(alertDiv);
+                        }
+                    }, 5000);
+                    
+                    // Close the modal
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('managerViolationModal'));
+                    if (modal) {
+                        modal.hide();
+                    }
+                    
+                } else {
+                    alert('❌ Failed to send report: ' + (result.error || 'Unknown error'));
+                }
+                
+            } catch (error) {
+                console.error('Error sending violation report:', error);
+                alert('❌ Failed to send violation report to admin');
+            }
+        }
+
+        // Time restriction functions
+        function updateLiveTimeAndStatus() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true
+            });
+            const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const dayName = dayNames[now.getDay()];
+            
+            // Update time and day display
+            const liveTimeElement = document.getElementById('live-time');
+            const currentDayElement = document.getElementById('current-day');
+            const timeStatusElement = document.getElementById('time-status');
+            
+            if (liveTimeElement) liveTimeElement.textContent = timeString;
+            if (currentDayElement) currentDayElement.textContent = dayName;
+            
+            // Determine current status
+            if (timeStatusElement) {
+                const status = getTimeStatus(now);
+                timeStatusElement.textContent = status.text;
+                timeStatusElement.className = `fw-bold ${status.class}`;
+            }
+        }
+        
+        function getTimeStatus(now) {
+            const dayOfWeek = now.getDay();
+            const currentMinutes = now.getHours() * 60 + now.getMinutes();
+            
+            // Time windows in minutes
+            const morningStart = 8 * 60;      // 8:00 AM
+            const morningEnd = 12 * 60;       // 12:00 PM
+            const afternoonStart = 13 * 60;   // 1:00 PM
+            const afternoonEnd = 17 * 60;     // 5:00 PM
+            
+            if (dayOfWeek === 0) { // Sunday
+                return { text: 'Not a working day', class: 'text-danger' };
+            }
+            
+            if (dayOfWeek === 6) { // Saturday
+                if (currentMinutes >= morningStart && currentMinutes <= morningEnd) {
+                    return { text: 'Saturday Morning Session (Active)', class: 'text-success' };
+                } else {
+                    return { text: 'Outside Saturday working hours', class: 'text-danger' };
+                }
+            }
+            
+            // Monday to Friday
+            if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+                if (currentMinutes >= morningStart && currentMinutes <= morningEnd) {
+                    return { text: 'Morning Session (Active)', class: 'text-success' };
+                } else if (currentMinutes >= afternoonStart && currentMinutes <= afternoonEnd) {
+                    return { text: 'Afternoon Session (Active)', class: 'text-success' };
+                } else if (currentMinutes > morningEnd && currentMinutes < afternoonStart) {
+                    return { text: 'Lunch Break', class: 'text-warning' };
+                } else {
+                    return { text: 'Outside working hours', class: 'text-danger' };
+                }
+            }
+            
+            return { text: 'Unknown', class: 'text-muted' };
+        }
+        
+        // Update time every second
+        setInterval(updateLiveTimeAndStatus, 1000);
+        
+        // Time-based restrictions function
+        function applyTimeRestrictions(buttons) {
+            const now = new Date();
+            const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+            const currentMinutes = now.getHours() * 60 + now.getMinutes();
+            
+            // Time windows in minutes
+            const morningStart = 8 * 60;      // 8:00 AM
+            const morningEnd = 12 * 60;       // 12:00 PM
+            const afternoonStart = 13 * 60;   // 1:00 PM
+            const afternoonEnd = 17 * 60;     // 5:00 PM
+            
+            const [morningInBtn, morningOutBtn, afternoonInBtn, afternoonOutBtn] = buttons;
+            
+            // Sunday - No work allowed
+            if (dayOfWeek === 0) {
+                buttons.forEach(btn => {
+                    btn.disabled = true;
+                    btn.classList.add('disabled');
+                    btn.title = 'Attendance not allowed on Sundays';
+                });
+                return;
+            }
+            
+            // Saturday - Morning only
+            if (dayOfWeek === 6) {
+                // Disable afternoon buttons completely
+                afternoonInBtn.disabled = true;
+                afternoonInBtn.classList.add('disabled');
+                afternoonInBtn.title = 'Afternoon sessions not allowed on Saturday';
+                
+                afternoonOutBtn.disabled = true;
+                afternoonOutBtn.classList.add('disabled');
+                afternoonOutBtn.title = 'Afternoon sessions not allowed on Saturday';
+                
+                // Morning buttons - only during 8AM-12PM
+                if (currentMinutes < morningStart || currentMinutes > morningEnd) {
+                    morningInBtn.disabled = true;
+                    morningInBtn.classList.add('disabled');
+                    morningInBtn.title = 'Saturday morning attendance only allowed between 8:00 AM - 12:00 PM';
+                    
+                    morningOutBtn.disabled = true;
+                    morningOutBtn.classList.add('disabled');
+                    morningOutBtn.title = 'Saturday morning attendance only allowed between 8:00 AM - 12:00 PM';
+                }
+                return;
+            }
+            
+            // Monday to Friday
+            if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+                // Morning session restrictions (8AM-12PM)
+                if (currentMinutes < morningStart || currentMinutes > morningEnd) {
+                    morningInBtn.disabled = true;
+                    morningInBtn.classList.add('disabled');
+                    morningInBtn.title = 'Morning check-in only allowed between 8:00 AM - 12:00 PM';
+                    
+                    morningOutBtn.disabled = true;
+                    morningOutBtn.classList.add('disabled');
+                    morningOutBtn.title = 'Morning check-out only allowed between 8:00 AM - 12:00 PM';
+                }
+                
+                // Afternoon session restrictions (1PM-5PM)
+                if (currentMinutes < afternoonStart || currentMinutes > afternoonEnd) {
+                    afternoonInBtn.disabled = true;
+                    afternoonInBtn.classList.add('disabled');
+                    afternoonInBtn.title = 'Afternoon check-in only allowed between 1:00 PM - 5:00 PM';
+                    
+                    afternoonOutBtn.disabled = true;
+                    afternoonOutBtn.classList.add('disabled');
+                    afternoonOutBtn.title = 'Afternoon check-out only allowed between 1:00 PM - 5:00 PM';
+                }
+            }
+        }
+
+        // Fetch API with authentication
+        async function fetchApi(url, options = {}) {
+            const defaultOptions = {
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...options.headers
+                }
+            };
+            
+            return fetch(url, { ...defaultOptions, ...options });
+        }
+
+        // Check-in function
+        async function checkIn(type) {
+            try {
+                console.log(`Attempting to check in for ${type} session`);
+                
+                const response = await fetchApi('/api/attendance', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'checkin',
+                        type: type
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showAlert(`✅ Successfully checked in for ${type} session at ${result.time}!`, 'success');
+                    // Reload today's status to update the UI
+                    await loadTodayStatus();
+                } else {
+                    showAlert(`❌ Check-in failed: ${result.error || result.message}`, 'danger');
+                }
+            } catch (error) {
+                console.error('Check-in error:', error);
+                showAlert('❌ Network error during check-in. Please try again.', 'danger');
+            }
+        }
+
+        // Check-out function
+        async function checkOut(type) {
+            try {
+                console.log(`Attempting to check out from ${type} session`);
+                
+                const response = await fetchApi('/api/attendance', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'checkout',
+                        type: type
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showAlert(`✅ Successfully checked out from ${type} session at ${result.time}!`, 'success');
+                    // Reload today's status to update the UI
+                    await loadTodayStatus();
+                } else {
+                    showAlert(`❌ Check-out failed: ${result.error || result.message}`, 'danger');
+                }
+            } catch (error) {
+                console.error('Check-out error:', error);
+                showAlert('❌ Network error during check-out. Please try again.', 'danger');
+            }
+        }
+
+        // Show alert function
+        function showAlert(message, type) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+            alertDiv.style.cssText = 'top: 80px; right: 20px; z-index: 9999; min-width: 300px;';
+            alertDiv.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.body.appendChild(alertDiv);
+
+            setTimeout(() => {
+                if (alertDiv.parentNode) {
+                    alertDiv.parentNode.removeChild(alertDiv);
+                }
+            }, 5000);
+        }
+        
+        // Mobile Navigation Functions
+        function toggleMobileNav() {
+            const sidebar = document.querySelector('.sidebar');
+            const overlay = document.querySelector('.sidebar-overlay');
+            
+            if (sidebar && overlay) {
+                sidebar.classList.toggle('show');
+                overlay.classList.toggle('show');
+                
+                // Prevent body scroll when sidebar is open
+                if (sidebar.classList.contains('show')) {
+                    document.body.style.overflow = 'hidden';
+                } else {
+                    document.body.style.overflow = '';
+                }
+            }
+        }
+        
+        function closeMobileNav() {
+            const sidebar = document.querySelector('.sidebar');
+            const overlay = document.querySelector('.sidebar-overlay');
+            
+            if (sidebar && overlay) {
+                sidebar.classList.remove('show');
+                overlay.classList.remove('show');
+                document.body.style.overflow = '';
+            }
+        }
+        
+        // Update mobile navigation based on user role
+        function updateMobileNavigation(role) {
+            const mobileNav = document.querySelector('.navbar.d-md-none .navbar-nav');
+            if (!mobileNav) return;
+            
+            // Clear existing navigation
+            mobileNav.innerHTML = '';
+            
+            // Base navigation for all users
+            const baseNavItems = [
+                { href: '/dashboard', icon: 'fas fa-tachometer-alt', text: 'Dashboard' },
+                { href: '/attendance', icon: 'fas fa-clock', text: 'Attendance', active: true },
+                { href: '/leave', icon: 'fas fa-calendar-alt', text: 'Leave' },
+                { href: '/profile', icon: 'fas fa-user', text: 'Profile' }
+            ];
+            
+            // Additional navigation for managers and admins
+            const adminNavItems = [
+                { href: '/employees', icon: 'fas fa-users', text: 'Employees' },
+                { href: '/reports', icon: 'fas fa-chart-bar', text: 'Reports' },
+                { href: '/payroll', icon: 'fas fa-money-bill-wave', text: 'Payroll' }
+            ];
+            
+            let navItems = [...baseNavItems];
+            
+            // Add admin/manager items
+            if (role === 'admin' || role === 'manager') {
+                navItems = [...baseNavItems, ...adminNavItems];
+            }
+            
+            // Create navigation items
+            navItems.forEach(item => {
+                const navLink = document.createElement('a');
+                navLink.className = `nav-link text-center px-2 ${item.active ? 'active' : ''}`;
+                navLink.href = item.href;
+                navLink.style.flex = '1';
+                if (item.active) {
+                    navLink.style.backgroundColor = '#e3f2fd';
+                    navLink.style.borderRadius = '5px';
+                }
+                
+                navLink.innerHTML = `
+                    <i class="${item.icon} d-block"></i>
+                    <small>${item.text}</small>
+                `;
+                
+                mobileNav.appendChild(navLink);
+            });
+            
+            console.log(`Mobile navigation updated for ${role} role`);
+        }
+        
+        // Close mobile nav when clicking on nav links
+        document.addEventListener('DOMContentLoaded', function() {
+            const navLinks = document.querySelectorAll('.sidebar .nav-link');
+            navLinks.forEach(link => {
+                link.addEventListener('click', closeMobileNav);
+            });
+        });
+    </script>
+
+    <!-- Copyright Footer -->
+    <footer class="bg-dark text-white py-2 mt-4">
+        <div class="container text-center">
+            <small>
+                © 2025/26 Employee Management System. All rights reserved. | Prepared by Wondwosen Tefera
+            </small>
+        </div>
+    </footer>
+</body>
+</html>

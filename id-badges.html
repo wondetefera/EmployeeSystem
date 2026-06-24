@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ID Badges - Employee Management System</title>
+    <link href="/assets/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/assets/css/all.min.css" rel="stylesheet">
+    <link href="/assets/css/dark-theme.css" rel="stylesheet">
+    <link href="assets/css/dashboard.css" rel="stylesheet">
+    
+    </head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top no-print">
+        <div class="container-fluid">
+            <button class="mobile-nav-toggle" onclick="toggleSidebar()">
+                <i class="fas fa-bars"></i>
+            </button>
+            <a class="navbar-brand" href="/dashboard">
+                <i class="fas fa-building me-2"></i>Employee Management System
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="#" onclick="logout()">
+                    <i class="fas fa-sign-out-alt me-1"></i>Logout
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid no-print" style="padding-top: 56px;">
+        <div class="row">
+            <nav class="col-md-3 col-lg-2 d-md-block bg-light sidebar" id="sidebar">
+                <div class="position-sticky pt-3">
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link" href="/dashboard">
+                                <i class="fas fa-tachometer-alt me-2"></i>Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/employees">
+                                <i class="fas fa-users me-2"></i>Employees
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/departments">
+                                <i class="fas fa-building me-2"></i>Departments
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/attendance">
+                                <i class="fas fa-clock me-2"></i>Attendance
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/leave">
+                                <i class="fas fa-calendar-alt me-2"></i>Leave Management
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/reports">
+                                <i class="fas fa-chart-bar me-2"></i>Reports
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link active" href="/id-badges">
+                                <i class="fas fa-id-card me-2"></i>ID Badges
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 main-content">
+                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                    <h1 class="h2">Employee ID Badges</h1>
+                    <div class="btn-toolbar mb-2 mb-md-0">
+                        <div class="btn-group me-2">
+                            <button class="btn btn-primary" onclick="printBadges()">
+                                <i class="fas fa-print me-1"></i>Print All
+                            </button>
+                            <button class="btn btn-outline-secondary" onclick="printSelected()">
+                                <i class="fas fa-check-square me-1"></i>Print Selected
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Employee Selection -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0"><i class="fas fa-filter me-2"></i>Badge Configuration</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-3">
+                                        <label for="companyName" class="form-label">Company Name</label>
+                                        <input type="text" class="form-control" id="companyName" value="Your Company Name" onchange="updateBadges()">
+                                        <div class="form-text">This will appear on all badges</div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="departmentFilter" class="form-label">Department</label>
+                                        <select class="form-select" id="departmentFilter" onchange="filterEmployees()">
+                                            <option value="">All Departments</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="statusFilter" class="form-label">Status</label>
+                                        <select class="form-select" id="statusFilter" onchange="filterEmployees()">
+                                            <option value="">All Status</option>
+                                            <option value="active">Active</option>
+                                            <option value="inactive">Inactive</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">&nbsp;</label>
+                                        <div>
+                                            <button class="btn btn-outline-primary" onclick="selectAll()">
+                                                <i class="fas fa-check-double me-1"></i>Select All
+                                            </button>
+                                            <button class="btn btn-outline-secondary" onclick="selectNone()">
+                                                <i class="fas fa-times me-1"></i>Clear All
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Employee List -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0"><i class="fas fa-list me-2"></i>Employee List</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th width="50">
+                                                    <input type="checkbox" id="selectAllCheckbox" onchange="toggleAll()">
+                                                </th>
+                                                <th>Employee ID</th>
+                                                <th>Name</th>
+                                                <th>Department</th>
+                                                <th>Job Title</th>
+                                                <th>Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="employeeList">
+                                            <tr>
+                                                <td colspan="6" class="text-center">Loading employees...</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Badge Preview/Print Area -->
+    <div id="badgeContainer" class="container-fluid">
+        <div class="row" id="badgesGrid">
+            <!-- Badges will be generated here -->
+        </div>
+    </div>
+
+    <script src="/assets/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/js/config.js"></script>
+    <script>
+        let allEmployees = [];
+        let filteredEmployees = [];
+
+        document.addEventListener('DOMContentLoaded', function() {
+            loadEmployees();
+            loadDepartments();
+        });
+
+        async function loadEmployees() {
+            try {
+                const response = await fetchApi('/api/employees');
+                if (response.ok) {
+                    const result = await response.json();
+                    allEmployees = result.data;
+                    filteredEmployees = [...allEmployees];
+                    displayEmployeeList();
+                    generateBadges();
+                } else {
+                    document.getElementById('employeeList').innerHTML = 
+                        '<tr><td colspan="6" class="text-center text-danger">Failed to load employees</td></tr>';
+                }
+            } catch (error) {
+                console.error('Error loading employees:', error);
+                document.getElementById('employeeList').innerHTML = 
+                    '<tr><td colspan="6" class="text-center text-danger">Error loading employees</td></tr>';
+            }
+        }
+
+        async function loadDepartments() {
+            try {
+                const response = await fetchApi('/api/departments');
+                if (response.ok) {
+                    const result = await response.json();
+                    const select = document.getElementById('departmentFilter');
+                    
+                    result.data.forEach(dept => {
+                        const option = document.createElement('option');
+                        option.value = dept.name;
+                        option.textContent = dept.name;
+                        select.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading departments:', error);
+            }
+        }
+
+        function displayEmployeeList() {
+            const tbody = document.getElementById('employeeList');
+            
+            if (filteredEmployees.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center">No employees found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = filteredEmployees.map(emp => `
+                <tr>
+                    <td>
+                        <input type="checkbox" class="employee-checkbox" value="${emp.id}" 
+                               onchange="updateBadges()" ${emp.selected ? 'checked' : ''}>
+                    </td>
+                    <td><strong>${emp.employee_id}</strong></td>
+                    <td>${emp.first_name} ${emp.last_name}</td>
+                    <td>${emp.department || 'N/A'}</td>
+                    <td>${emp.job_title || 'N/A'}</td>
+                    <td>
+                        <span class="badge bg-${emp.status === 'active' ? 'success' : 'secondary'}">
+                            ${emp.status}
+                        </span>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function filterEmployees() {
+            const department = document.getElementById('departmentFilter').value;
+            const status = document.getElementById('statusFilter').value;
+
+            filteredEmployees = allEmployees.filter(emp => {
+                const deptMatch = !department || emp.department === department;
+                const statusMatch = !status || emp.status === status;
+                return deptMatch && statusMatch;
+            });
+
+            displayEmployeeList();
+            updateBadges();
+        }
+
+        function selectAll() {
+            document.querySelectorAll('.employee-checkbox').forEach(cb => {
+                cb.checked = true;
+            });
+            updateBadges();
+        }
+
+        function selectNone() {
+            document.querySelectorAll('.employee-checkbox').forEach(cb => {
+                cb.checked = false;
+            });
+            updateBadges();
+        }
+
+        function toggleAll() {
+            const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+            document.querySelectorAll('.employee-checkbox').forEach(cb => {
+                cb.checked = selectAllCheckbox.checked;
+            });
+            updateBadges();
+        }
+
+        function updateBadges() {
+            const selectedIds = Array.from(document.querySelectorAll('.employee-checkbox:checked'))
+                .map(cb => parseInt(cb.value));
+            
+            const selectedEmployees = allEmployees.filter(emp => selectedIds.includes(emp.id));
+            generateBadges(selectedEmployees);
+        }
+
+        function generateBadges(employees = allEmployees) {
+            const grid = document.getElementById('badgesGrid');
+            const companyName = document.getElementById('companyName').value || 'Your Company Name';
+            
+            if (employees.length === 0) {
+                grid.innerHTML = `
+                    <div class="col-12 text-center py-5">
+                        <i class="fas fa-id-card fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">Select employees to generate ID badges</p>
+                    </div>
+                `;
+                return;
+            }
+
+            grid.innerHTML = employees.map(emp => {
+                // Build full name using Ethiopian naming convention
+                let fullName = emp.first_name;
+                if (emp.father_name) {
+                    fullName += ` ${emp.father_name}`;
+                }
+                if (emp.gfather_name) {
+                    fullName += ` ${emp.gfather_name}`;
+                }
+
+                return `
+                <div class="col-auto">
+                    <div class="badge-container">
+                        <div class="id-badge" id="badge-${emp.id}">
+                            <div class="id-badge-header">
+                                <i class="fas fa-building me-2"></i>${companyName}
+                            </div>
+                            <div class="id-badge-content">
+                                <div class="id-badge-photo">
+                                    ${emp.photo ? 
+                                        `<img src="${emp.photo}" alt="${fullName}">` : 
+                                        '<i class="fas fa-user"></i>'
+                                    }
+                                </div>
+                                <div class="id-badge-info">
+                                    <div class="id-badge-name">${fullName}</div>
+                                    <div class="id-badge-id">ID: ${emp.employee_id}</div>
+                                    <div class="id-badge-title">${emp.job_title || 'Employee'}</div>
+                                    <div class="id-badge-dept">${emp.department || 'General Department'}</div>
+                                </div>
+                            </div>
+                            <div class="id-badge-footer"></div>
+                            
+                            <!-- Back side (hidden by default) -->
+                            <div class="id-badge-back">
+                                <div class="company-info">
+                                    <div class="company-logo">
+                                        <i class="fas fa-building"></i>
+                                    </div>
+                                    <div class="company-name">${companyName}</div>
+                                    <div class="company-address">
+                                        123 Business Street<br>
+                                        Addis Ababa, Ethiopia<br>
+                                        Phone: +251-11-123-4567<br>
+                                        Email: info@company.com
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="badge-actions no-print">
+                            <button class="btn btn-sm btn-primary" onclick="printSingleBadge(${emp.id}, '${fullName}')">
+                                <i class="fas fa-print me-1"></i>Print ID
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            }).join('');
+        }
+
+        function printBadges() {
+            // Select all employees first
+            selectAll();
+            setTimeout(() => {
+                window.print();
+            }, 100);
+        }
+
+        function printSelected() {
+            const selectedCount = document.querySelectorAll('.employee-checkbox:checked').length;
+            
+            if (selectedCount === 0) {
+                showAlert('warning', 'Please select at least one employee to print badges');
+                return;
+            }
+            
+            window.print();
+        }
+
+        function printSingleBadge(employeeId, employeeName) {
+            // Get the specific badge element
+            const badgeElement = document.getElementById(`badge-${employeeId}`);
+            
+            if (!badgeElement) {
+                showAlert('danger', 'Badge not found');
+                return;
+            }
+
+            // Create a new window for printing
+            const printWindow = window.open('', '_blank', 'width=800,height=600');
+            
+            // Get the current company name
+            const companyName = document.getElementById('companyName').value || 'Your Company Name';
+            
+            // Write the HTML content for printing
+            printWindow.document.write(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>ID Badge - ${employeeName}</title>
+                    <link href="/assets/css/bootstrap.min.css" rel="stylesheet">
+                    <link href="/assets/css/all.min.css" rel="stylesheet">
+                    </head>
+                <body>
+                    <div class="print-container">
+                        ${badgeElement.outerHTML}
+                    </div>
+                </body>
+                </html>
+            `);
+            
+            printWindow.document.close();
+            
+            // Wait for content to load, then print
+            printWindow.onload = function() {
+                setTimeout(() => {
+                    printWindow.print();
+                    printWindow.close();
+                }, 500);
+            };
+        }
+
+        function showAlert(type, message) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+            alertDiv.style.cssText = 'top: 70px; right: 20px; z-index: 9999; min-width: 300px;';
+            alertDiv.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            
+            document.body.appendChild(alertDiv);
+            
+            setTimeout(() => {
+                if (alertDiv.parentNode) {
+                    alertDiv.parentNode.removeChild(alertDiv);
+                }
+            }, 5000);
+        }
+
+        async function logout() {
+            try {
+                await fetchApi('/api/logout', { method: 'POST' });
+                window.location.href = window.configManager.getServerUrl() + '/';
+            } catch (error) {
+                console.error('Logout error:', error);
+                window.location.href = window.configManager.getServerUrl() + '/';
+            }
+        }
+
+        // Mobile navigation toggle
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('show');
+        }
+
+        // Close sidebar when clicking outside on mobile
+        document.addEventListener('click', function(event) {
+            const sidebar = document.getElementById('sidebar');
+            const toggle = document.querySelector('.mobile-nav-toggle');
+            
+            if (window.innerWidth <= 768 && 
+                !sidebar.contains(event.target) && 
+                !toggle.contains(event.target) && 
+                sidebar.classList.contains('show')) {
+                sidebar.classList.remove('show');
+            }
+        });
+    </script>
+
+    <!-- Copyright Footer -->
+    <footer class="bg-dark text-white py-2 mt-4">
+        <div class="container text-center">
+            <small>
+                © 2025/26 Employee Management System. All rights reserved. | Prepared by Wondwosen Tefera
+            </small>
+        </div>
+    </footer>
+</body>
+</html>

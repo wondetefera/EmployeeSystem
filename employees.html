@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employees - Employee Management System</title>
+    <link href="/assets/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/assets/css/all.min.css" rel="stylesheet">
+    <link href="/assets/css/dark-theme.css" rel="stylesheet">`n    <link href="assets/css/dashboard.css" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/dashboard">
+                <i class="fas fa-building me-2"></i>Employee Management System
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="#" onclick="logout()">
+                    <i class="fas fa-sign-out-alt me-1"></i>Logout
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid" style="padding-top: 56px;">
+        <div class="row">
+            <nav class="col-md-3 col-lg-2 d-md-block bg-light sidebar">
+                <div class="position-sticky pt-3">
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link" href="/dashboard">
+                                <i class="fas fa-tachometer-alt me-2"></i>Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link active" href="/employees">
+                                <i class="fas fa-users me-2"></i>Employees
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/departments">
+                                <i class="fas fa-building me-2"></i>Departments
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/attendance">
+                                <i class="fas fa-clock me-2"></i>Attendance
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/leave">
+                                <i class="fas fa-calendar-alt me-2"></i>Leave Management
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/reports">
+                                <i class="fas fa-chart-bar me-2"></i>Reports
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/id-badges">
+                                <i class="fas fa-id-card me-2"></i>ID Badges
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
+                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                    <h1 class="h2">Employees</h1>
+                    <div class="btn-toolbar mb-2 mb-md-0" id="admin-controls" style="display: none;">
+                        <a href="/add-employee" class="btn btn-primary">
+                            <i class="fas fa-plus me-1"></i>Add Employee
+                        </a>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-users me-2"></i>Employee List</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Employee ID</th>
+                                        <th>Name</th>
+                                        <th>Email</th>
+                                        <th>Department</th>
+                                        <th>Job Title</th>
+                                        <th>Salary (ETB)</th>
+                                        <th>Start Date</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="employees-table">
+                                    <tr>
+                                        <td colspan="9" class="text-center">Loading employees...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="/assets/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/js/config.js"></script>
+    <script>
+        let currentUser = null;
+
+        document.addEventListener('DOMContentLoaded', async function() {
+            await checkUserAccess();
+            loadEmployees();
+        });
+
+        async function checkUserAccess() {
+            try {
+                const response = await fetchApi('/api/user');
+                if (response.ok) {
+                    currentUser = await response.json();
+                    
+                    // STRICT ACCESS: Only admin and manager can access employee management
+                    // Employees are completely blocked from this page
+                    if (currentUser.role === 'employee') {
+                        showAlert('danger', 'Access Denied: Employees cannot access employee management.');
+                        setTimeout(() => {
+                            window.location.href = window.configManager.getServerUrl() + '/dashboard';
+                        }, 1500);
+                        return false;
+                    }
+                    
+                    if (currentUser.role !== 'admin' && currentUser.role !== 'manager') {
+                        showAlert('danger', 'Access denied. Only administrators and managers can access employee management.');
+                        setTimeout(() => {
+                            window.location.href = window.configManager.getServerUrl() + '/dashboard';
+                        }, 2000);
+                        return false;
+                    }
+                    
+                    // Show admin controls only for admins
+                    if (currentUser.role === 'admin') {
+                        document.getElementById('admin-controls').style.display = 'block';
+                    }
+                    
+                    return true;
+                } else {
+                    window.location.href = window.configManager.getServerUrl() + '/login';
+                    return false;
+                }
+            } catch (error) {
+                console.error('Error checking user access:', error);
+                window.location.href = window.configManager.getServerUrl() + '/login';
+                return false;
+            }
+        }
+
+        async function loadEmployees() {
+            try {
+                const response = await fetchApi('/api/employees');
+                if (response.ok) {
+                    const result = await response.json();
+                    displayEmployees(result.data);
+                } else {
+                    document.getElementById('employees-table').innerHTML = 
+                        '<tr><td colspan="8" class="text-center text-danger">Failed to load employees</td></tr>';
+                }
+            } catch (error) {
+                console.error('Error loading employees:', error);
+                document.getElementById('employees-table').innerHTML = 
+                    '<tr><td colspan="8" class="text-center text-danger">Error loading employees</td></tr>';
+            }
+        }
+
+        function displayEmployees(employees) {
+            const tbody = document.getElementById('employees-table');
+            
+            if (employees.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" class="text-center">No employees found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = employees.map(emp => `
+                <tr>
+                    <td><strong>${emp.employee_id}</strong></td>
+                    <td>${[emp.first_name, emp.father_name, emp.gfather_name, emp.last_name].filter(name => name && name.trim()).join(' ')}</td>
+                    <td>${emp.email}</td>
+                    <td>${emp.department || 'N/A'}</td>
+                    <td>${emp.job_title || 'N/A'}</td>
+                    <td><strong>ETB ${emp.salary ? parseFloat(emp.salary).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '0.00'}</strong></td>
+                    <td>${emp.start_date}</td>
+                    <td>
+                        <span class="badge ${emp.status === 'active' ? 'bg-success' : 'bg-secondary'}">
+                            ${emp.status}
+                        </span>
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary" onclick="viewEmployee(${emp.id})">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="editEmployee(${emp.id})">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        ${(currentUser.role === 'admin' || currentUser.role === 'manager') && emp.email !== currentUser.email ? 
+                            `<button class="btn btn-sm btn-outline-warning" onclick="resetPassword(\`${emp.email}\`, \`${[emp.first_name, emp.father_name, emp.gfather_name, emp.last_name].filter(name => name && name.trim()).join(' ')}\`)" title="Reset Password">
+                                <i class="fas fa-key"></i>
+                            </button>` : ''
+                        }
+                        ${currentUser.role === 'admin' && emp.email !== currentUser.email ? 
+                            `<button class="btn btn-sm btn-outline-danger" onclick="deleteEmployee(${emp.id}, \`${[emp.first_name, emp.father_name, emp.gfather_name, emp.last_name].filter(name => name && name.trim()).join(' ')}\`, \`${emp.email}\`)" title="Remove Employee">
+                                <i class="fas fa-trash"></i>
+                            </button>` : ''
+                        }
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function viewEmployee(id) {
+            window.location.href = window.configManager.getServerUrl() + `/employee-detail?id=${id}`;
+        }
+
+        function editEmployee(id) {
+            window.location.href = window.configManager.getServerUrl() + `/employee-detail?id=${id}&edit=true`;
+        }
+
+        async function logout() {
+            try {
+                await fetchApi('/api/logout', { method: 'POST' });
+                window.location.href = window.configManager.getServerUrl() + '/';
+            } catch (error) {
+                console.error('Logout error:', error);
+                window.location.href = window.configManager.getServerUrl() + '/';
+            }
+        }
+
+        async function resetPassword(email, firstName, lastName) {
+            const confirmMessage = `Are you sure you want to reset the password for ${firstName} ${lastName}?\n\nThis will generate a new temporary password.`;
+            
+            if (!confirm(confirmMessage)) {
+                return;
+            }
+
+            try {
+                const response = await fetchApi('/api/reset-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        targetEmail: email,
+                        newPassword: '123456'
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showPasswordResetAlert(result.newPassword, firstName, lastName, email);
+                } else {
+                    showAlert('danger', result.error || 'Failed to reset password');
+                }
+            } catch (error) {
+                console.error('Error resetting password:', error);
+                showAlert('danger', 'An error occurred while resetting the password');
+            }
+        }
+
+        function generateTempPassword() {
+            // Use common password for all resets
+            return '123456';
+        }
+
+        function showPasswordResetAlert(newPassword, firstName, lastName, email) {
+            const alertHTML = `
+                <div class="alert alert-success alert-dismissible fade show position-fixed" style="top: 70px; right: 20px; z-index: 9999; min-width: 400px; max-width: 500px;">
+                    <h6><i class="fas fa-check-circle me-2"></i>Password Reset Successful</h6>
+                    <p><strong>${firstName} ${lastName}</strong></p>
+                    <div class="small">
+                        <strong>Email:</strong> <code>${email}</code><br>
+                        <strong>New Password:</strong> <code>${newPassword}</code>
+                        <button class="btn btn-sm btn-outline-success mt-1" onclick="copyPasswordToClipboard(\`${newPassword}\`)">
+                            <i class="fas fa-copy me-1"></i>Copy Password
+                        </button>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            `;
+            
+            document.body.insertAdjacentHTML('beforeend', alertHTML);
+            
+            // Auto remove after 10 seconds
+            setTimeout(() => {
+                const alert = document.querySelector('.alert-success');
+                if (alert) {
+                    alert.remove();
+                }
+            }, 10000);
+        }
+
+        function copyPasswordToClipboard(password) {
+            navigator.clipboard.writeText(password).then(() => {
+                showAlert('info', 'Password copied to clipboard!');
+            }).catch(() => {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = password;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                showAlert('info', 'Password copied to clipboard!');
+            });
+        }
+
+        async function deleteEmployee(employeeId, firstName, lastName, email) {
+            // Double confirmation for delete action
+            const confirmMessage = `⚠️ WARNING: This action cannot be undone!\n\nAre you sure you want to PERMANENTLY REMOVE:\n${firstName} ${lastName} (${email})\n\nThis will delete:\n- Employee record\n- User account\n- All attendance records\n- All leave requests\n\nType "DELETE" to confirm:`;
+            
+            const userInput = prompt(confirmMessage);
+            
+            if (userInput !== 'DELETE') {
+                if (userInput !== null) {
+                    showAlert('info', 'Employee removal cancelled - confirmation text did not match');
+                }
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/employees/${employeeId}`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showAlert('success', `Employee ${firstName} ${lastName} has been removed successfully`);
+                    
+                    // Reload the employee list after successful deletion
+                    setTimeout(() => {
+                        loadEmployees();
+                    }, 2000);
+                } else {
+                    showAlert('danger', result.error || 'Failed to remove employee');
+                }
+            } catch (error) {
+                console.error('Error removing employee:', error);
+                showAlert('danger', 'An error occurred while removing the employee');
+            }
+        }
+    </script>
+
+    <!-- Copyright Footer -->
+    <footer class="bg-dark text-white py-2 mt-4">
+        <div class="container text-center">
+            <small>
+                © 2025/26 Employee Management System. All rights reserved. | Prepared by Wondwosen Tefera
+            </small>
+        </div>
+    </footer>
+</body>
+</html>

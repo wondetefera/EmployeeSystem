@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employee Management System</title>
+    <link href="/assets/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/assets/css/all.min.css" rel="stylesheet">
+    <link href="/assets/css/fontawesome-fix.css" rel="stylesheet">`n    <link href="/assets/css/dark-theme.css" rel="stylesheet">
+    <style>
+        .hero-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            position: relative;
+        }
+        .feature-card {
+            transition: transform 0.3s ease;
+        }
+        .feature-card:hover {
+            transform: translateY(-5px);
+        }
+        .blurred-clock {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            padding: 20px;
+            color: white;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            min-width: 200px;
+        }
+        .clock-time {
+            font-size: 1.8rem;
+            font-weight: bold;
+            font-family: 'Courier New', monospace;
+            margin-bottom: 5px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        .clock-date {
+            font-size: 0.85rem;
+            opacity: 0.9;
+            margin-bottom: 2px;
+        }
+        .clock-day {
+            font-size: 0.9rem;
+            font-weight: 500;
+            opacity: 0.8;
+        }
+        @media (max-width: 768px) {
+            .blurred-clock {
+                position: relative;
+                top: auto;
+                right: auto;
+                margin: 20px auto;
+                max-width: 250px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="hero-section">
+        <!-- Blurred Digital Clock -->
+        <div class="blurred-clock d-none d-md-block">
+            <div class="clock-time" id="clock-time">00:00:00</div>
+            <div class="clock-day" id="clock-day">Monday</div>
+            <div class="clock-date" id="clock-date">January 1, 2025</div>
+        </div>
+        
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-lg-6">
+                    <div class="text-white">
+                        <!-- Mobile Clock -->
+                        <div class="blurred-clock d-md-none mb-4">
+                            <div class="clock-time" id="clock-time-mobile">00:00:00</div>
+                            <div class="clock-day" id="clock-day-mobile">Monday</div>
+                            <div class="clock-date" id="clock-date-mobile">January 1, 2025</div>
+                        </div>
+                        
+                        <h1 class="display-4 fw-bold mb-4">Employee Management System</h1>
+                        <p class="lead mb-4">Streamline your workforce management with our comprehensive attendance and leave tracking solution.</p>
+                        <div class="d-flex gap-3">
+                            <a href="/login" class="btn btn-light btn-lg">
+                                <i class="fas fa-sign-in-alt me-2"></i>Login
+                            </a>
+                            <a href="#features" class="btn btn-outline-light btn-lg">
+                                <i class="fas fa-info-circle me-2"></i>Learn More
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="text-center">
+                        <i class="fas fa-users text-white" style="font-size: 15rem; opacity: 0.3;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <section id="features" class="py-5">
+        <div class="container">
+            <div class="row">
+                <div class="col-12 text-center mb-5">
+                    <h2 class="display-5 fw-bold">Key Features</h2>
+                    <p class="lead text-muted">Everything you need to manage your workforce effectively</p>
+                </div>
+            </div>
+            <div class="row g-4">
+                <div class="col-md-4">
+                    <div class="card feature-card h-100 border-0 shadow">
+                        <div class="card-body text-center p-4">
+                            <div class="mb-3">
+                                <i class="fas fa-user-plus text-primary" style="font-size: 3rem;"></i>
+                            </div>
+                            <h5 class="card-title">Employee Registration</h5>
+                            <p class="card-text">Easy employee onboarding with automatic ID generation and photo management.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card feature-card h-100 border-0 shadow">
+                        <div class="card-body text-center p-4">
+                            <div class="mb-3">
+                                <i class="fas fa-clock text-success" style="font-size: 3rem;"></i>
+                            </div>
+                            <h5 class="card-title">Attendance Tracking</h5>
+                            <p class="card-text">Comprehensive check-in/out system with overtime calculation and reporting.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card feature-card h-100 border-0 shadow">
+                        <div class="card-body text-center p-4">
+                            <div class="mb-3">
+                                <i class="fas fa-calendar-alt text-warning" style="font-size: 3rem;"></i>
+                            </div>
+                            <h5 class="card-title">Leave Management</h5>
+                            <p class="card-text">Smart leave tracking with automatic balance calculations and approval workflows.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card feature-card h-100 border-0 shadow">
+                        <div class="card-body text-center p-4">
+                            <div class="mb-3">
+                                <i class="fas fa-chart-bar text-info" style="font-size: 3rem;"></i>
+                            </div>
+                            <h5 class="card-title">Detailed Reports</h5>
+                            <p class="card-text">Generate comprehensive attendance and leave reports for better insights.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card feature-card h-100 border-0 shadow">
+                        <div class="card-body text-center p-4">
+                            <div class="mb-3">
+                                <i class="fas fa-users-cog text-danger" style="font-size: 3rem;"></i>
+                            </div>
+                            <h5 class="card-title">Role-Based Access</h5>
+                            <p class="card-text">Secure access control with Admin, Manager, and Employee roles.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card feature-card h-100 border-0 shadow">
+                        <div class="card-body text-center p-4">
+                            <div class="mb-3">
+                                <i class="fas fa-id-card text-secondary" style="font-size: 3rem;"></i>
+                            </div>
+                            <h5 class="card-title">ID Badge Generation</h5>
+                            <p class="card-text">Create professional employee ID badges with photos and company branding.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="bg-dark text-white py-4">
+        <div class="container">
+            <div class="row">
+                <div class="col-12 text-center">
+                    <p class="mb-0">&copy; 2024 Employee Management System. All rights reserved.</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="/assets/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // Digital Clock Functionality
+        function updateClock() {
+            const now = new Date();
+            
+            // Format time (HH:MM:SS)
+            const timeString = now.toLocaleTimeString('en-US', {
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            
+            // Format day
+            const dayString = now.toLocaleDateString('en-US', {
+                weekday: 'long'
+            });
+            
+            // Format date
+            const dateString = now.toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+            
+            // Update desktop clock elements
+            const timeElement = document.getElementById('clock-time');
+            const dayElement = document.getElementById('clock-day');
+            const dateElement = document.getElementById('clock-date');
+            
+            if (timeElement) timeElement.textContent = timeString;
+            if (dayElement) dayElement.textContent = dayString;
+            if (dateElement) dateElement.textContent = dateString;
+            
+            // Update mobile clock elements
+            const timeElementMobile = document.getElementById('clock-time-mobile');
+            const dayElementMobile = document.getElementById('clock-day-mobile');
+            const dateElementMobile = document.getElementById('clock-date-mobile');
+            
+            if (timeElementMobile) timeElementMobile.textContent = timeString;
+            if (dayElementMobile) dayElementMobile.textContent = dayString;
+            if (dateElementMobile) dateElementMobile.textContent = dateString;
+        }
+
+        // Initialize clock when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            updateClock();
+            setInterval(updateClock, 1000); // Update every second
+        });
+    </script>
+
+    <!-- Copyright Footer -->
+    <div class="bg-dark text-white py-2 mt-4">
+        <div class="container text-center">
+            <small>
+                © 2025/26 Employee Management System. All rights reserved. | Prepared by Wondwosen Tefera
+            </small>
+        </div>
+    </div>
+</body>
+</html>

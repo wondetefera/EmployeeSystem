@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leave Request - Employee Management System</title>
+    <link href="/assets/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/assets/css/all.min.css" rel="stylesheet">
+    <link href="/assets/css/dark-theme.css" rel="stylesheet">
+    <link href="assets/css/dashboard.css" rel="stylesheet">
+    </head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container-fluid">
+            <button class="mobile-nav-toggle" onclick="toggleSidebar()">
+                <i class="fas fa-bars"></i>
+            </button>
+            <a class="navbar-brand" href="/dashboard">
+                <i class="fas fa-building me-2"></i>Employee Management System
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="#" onclick="logout()">
+                    <i class="fas fa-sign-out-alt me-1"></i>Logout
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid" style="padding-top: 56px;">
+        <div class="row">
+            <nav class="col-md-3 col-lg-2 d-md-block bg-light sidebar" id="sidebar">
+                <div class="position-sticky pt-3">
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link" href="/dashboard">
+                                <i class="fas fa-tachometer-alt me-2"></i>Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/attendance">
+                                <i class="fas fa-clock me-2"></i>Attendance
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/leave">
+                                <i class="fas fa-calendar-alt me-2"></i>Leave Management
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link active" href="/leave-request">
+                                <i class="fas fa-plus me-2"></i>Request Leave
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 main-content">
+                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                    <h1 class="h2">Request Leave</h1>
+                    <div class="btn-toolbar mb-2 mb-md-0">
+                        <a href="/leave" class="btn btn-outline-secondary">
+                            <i class="fas fa-arrow-left me-1"></i>Back to Leave Management
+                        </a>
+                    </div>
+                </div>
+
+                <div id="alert-container"></div>
+
+                <div class="row">
+                    <div class="col-lg-8">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0"><i class="fas fa-calendar-plus me-2"></i>Leave Request Form</h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="leaveRequestForm">
+                                    <div class="row">
+                                        <div class="col-md-4 mb-3">
+                                            <label for="leave_type" class="form-label">Leave Type *</label>
+                                            <select class="form-select" id="leave_type" name="leave_type" required>
+                                                <option value="">Select Leave Type</option>
+                                                <option value="Annual Leave">Annual Leave</option>
+                                                <option value="Sick Leave">Sick Leave</option>
+                                                <option value="Personal Leave">Personal Leave</option>
+                                                <option value="Maternity/Paternity Leave">Maternity/Paternity Leave</option>
+                                                <option value="Emergency Leave">Emergency Leave</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <label for="leave_duration" class="form-label">Leave Duration *</label>
+                                            <select class="form-select" id="leave_duration" name="leave_duration" required onchange="calculateDays()">
+                                                <option value="">Select Duration</option>
+                                                <option value="full_day">Full Day</option>
+                                                <option value="half_day_morning">Half Day - Morning</option>
+                                                <option value="half_day_afternoon">Half Day - Afternoon</option>
+                                            </select>
+                                            <div class="form-text">
+                                                <small>
+                                                    <i class="fas fa-info-circle me-1"></i>
+                                                    Morning: 8:00 AM - 12:00 PM | Afternoon: 1:00 PM - 5:00 PM
+                                                </small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <label class="form-label">Working Days</label>
+                                            <div id="working-days" class="form-control-plaintext">
+                                                <strong>0 days</strong>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label for="start_date" class="form-label">Start Date *</label>
+                                            <input type="date" class="form-control" id="start_date" name="start_date" required onchange="calculateDays()">
+                                        </div>
+                                        <div class="col-md-6 mb-3" id="end-date-container">
+                                            <label for="end_date" class="form-label">End Date *</label>
+                                            <input type="date" class="form-control" id="end_date" name="end_date" required onchange="calculateDays()">
+                                            <div class="form-text">
+                                                <small id="date-help-text">
+                                                    <i class="fas fa-info-circle me-1"></i>
+                                                    For half-day leave, start and end date should be the same
+                                                </small>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label for="reason" class="form-label">Reason *</label>
+                                        <textarea class="form-control" id="reason" name="reason" rows="4" 
+                                                  placeholder="Please provide a detailed reason for your leave request..." required></textarea>
+                                    </div>
+
+                                    <!-- Notification Info -->
+                                    <div class="alert alert-info d-flex align-items-center mb-3" role="alert">
+                                        <i class="fas fa-bell me-2"></i>
+                                        <div>
+                                            <strong>Automatic Notifications:</strong> Your leave request will be automatically sent to all managers and administrators for review.
+                                        </div>
+                                    </div>
+
+                                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                                        <button type="reset" class="btn btn-outline-secondary me-md-2">
+                                            <i class="fas fa-undo me-1"></i>Reset
+                                        </button>
+                                        <button type="submit" class="btn btn-primary">
+                                            <i class="fas fa-paper-plane me-1"></i>Submit Request
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Leave Balance</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row text-center" id="leave-balance-content">
+                                    <div class="col-6">
+                                        <div class="border-end">
+                                            <h4 class="text-success" id="available-days">Loading...</h4>
+                                            <small class="text-muted">Available</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <h4 class="text-warning" id="days-used">Loading...</h4>
+                                        <small class="text-muted">Days Used</small>
+                                    </div>
+                                </div>
+                                <div class="mt-3" id="leave-balance-details" style="display: none;">
+                                    <small class="text-muted">
+                                        <div class="d-flex justify-content-between">
+                                            <span>Annual Entitlement:</span>
+                                            <span id="annual-entitlement">--</span>
+                                        </div>
+                                        <div class="d-flex justify-content-between">
+                                            <span>Days Used:</span>
+                                            <span id="total-used">--</span>
+                                        </div>
+                                        <div class="d-flex justify-content-between">
+                                            <span>Current Available:</span>
+                                            <span id="remaining-days">--</span>
+                                        </div>
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <h5 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i>Important Notes</h5>
+                            </div>
+                            <div class="card-body">
+                                <ul class="list-unstyled small">
+                                    <li class="mb-2">
+                                        <i class="fas fa-check text-success me-2"></i>
+                                        Leave requests must be submitted at least 3 days in advance
+                                    </li>
+                                    <li class="mb-2">
+                                        <i class="fas fa-check text-success me-2"></i>
+                                        Emergency leave can be submitted retrospectively
+                                    </li>
+                                    <li class="mb-2">
+                                        <i class="fas fa-check text-success me-2"></i>
+                                        Half-day leave: Morning (8:00 AM - 12:00 PM) or Afternoon (1:00 PM - 5:00 PM)
+                                    </li>
+                                    <li class="mb-2">
+                                        <i class="fas fa-check text-success me-2"></i>
+                                        Saturday is counted as half-day (0.5 days) for leave calculation
+                                    </li>
+                                    <li class="mb-2">
+                                        <i class="fas fa-check text-success me-2"></i>
+                                        Sunday is not counted as working day
+                                    </li>
+                                    <li class="mb-2">
+                                        <i class="fas fa-check text-success me-2"></i>
+                                        You will receive email notification on approval/rejection
+                                    </li>
+                                    <li class="mb-2">
+                                        <i class="fas fa-exclamation-triangle text-warning me-2"></i>
+                                        Cannot request leave for dates that already have pending or approved requests
+                                    </li>
+                                    <li class="mb-2">
+                                        <i class="fas fa-exclamation-triangle text-warning me-2"></i>
+                                        Cannot request more days than your available leave balance
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="/assets/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/js/config.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set minimum date to today
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('start_date').min = today;
+            document.getElementById('end_date').min = today;
+            
+            document.getElementById('leaveRequestForm').addEventListener('submit', handleSubmit);
+            
+            // Load leave balance
+            loadLeaveBalance();
+        });
+
+        async function loadLeaveBalance() {
+            try {
+                console.log('Loading leave balance...');
+                const response = await fetchApi('/api/leave-balance');
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log('Leave balance data:', result);
+                    
+                    if (result.success && result.data) {
+                        const balance = result.data;
+                        
+                        // Use the calculated values from the server
+                        const currentAvailable = balance.days_available || 0;
+                        const daysUsed = balance.days_used || 0;
+                        
+                        // Update the main display
+                        document.getElementById('available-days').textContent = currentAvailable;
+                        document.getElementById('days-used').textContent = daysUsed;
+                        
+                        // Update detailed breakdown
+                        document.getElementById('annual-entitlement').textContent = balance.annual_entitlement || 22;
+                        document.getElementById('total-used').textContent = daysUsed;
+                        document.getElementById('remaining-days').textContent = currentAvailable;
+                        
+                        // Show details
+                        document.getElementById('leave-balance-details').style.display = 'block';
+                        
+                        console.log(`Leave balance updated: ${currentAvailable} available, ${daysUsed} used`);
+                        console.log('Full balance object:', balance);
+                    } else {
+                        throw new Error(result.error || 'Failed to load leave balance');
+                    }
+                } else {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+            } catch (error) {
+                console.error('Error loading leave balance:', error);
+                
+                // Show error state
+                document.getElementById('available-days').textContent = 'Error';
+                document.getElementById('days-used').textContent = 'Error';
+                
+                // Show default values as fallback
+                setTimeout(() => {
+                    document.getElementById('available-days').textContent = '22';
+                    document.getElementById('days-used').textContent = '0';
+                    document.getElementById('annual-entitlement').textContent = '22';
+                    document.getElementById('total-used').textContent = '0';
+                    document.getElementById('remaining-days').textContent = '22';
+                    document.getElementById('leave-balance-details').style.display = 'block';
+                }, 2000);
+            }
+        }
+
+        function calculateDays() {
+            const startDate = document.getElementById('start_date').value;
+            const endDate = document.getElementById('end_date').value;
+            const leaveDuration = document.getElementById('leave_duration').value;
+            
+            // Handle duration-specific logic
+            if (leaveDuration && (leaveDuration === 'half_day_morning' || leaveDuration === 'half_day_afternoon')) {
+                // For half-day leave, auto-set end date to same as start date
+                if (startDate && endDate !== startDate) {
+                    document.getElementById('end_date').value = startDate;
+                }
+                
+                // Update help text
+                document.getElementById('date-help-text').innerHTML = 
+                    '<i class="fas fa-info-circle me-1"></i>Half-day leave: End date automatically set to same as start date';
+            } else {
+                // Update help text for full day
+                document.getElementById('date-help-text').innerHTML = 
+                    '<i class="fas fa-info-circle me-1"></i>Select the date range for your leave period';
+            }
+            
+            if (startDate && endDate) {
+                const start = new Date(startDate);
+                const end = new Date(endDate);
+                
+                if (end < start) {
+                    document.getElementById('working-days').innerHTML = '<strong class="text-danger">Invalid date range</strong>';
+                    return;
+                }
+                
+                let workingDays = 0;
+                const current = new Date(start);
+                
+                while (current <= end) {
+                    const dayOfWeek = current.getDay();
+                    if (dayOfWeek !== 0) { // Not Sunday (0)
+                        if (dayOfWeek === 6) { // Saturday (6) - count as half day
+                            workingDays += 0.5;
+                        } else { // Monday to Friday - count as full day
+                            workingDays++;
+                        }
+                    }
+                    current.setDate(current.getDate() + 1);
+                }
+                
+                // Apply half-day calculation
+                if (leaveDuration === 'half_day_morning' || leaveDuration === 'half_day_afternoon') {
+                    const halfDays = workingDays * 0.5;
+                    
+                    // Check balance in real-time
+                    const availableDaysText = document.getElementById('available-days').textContent;
+                    const availableDays = parseFloat(availableDaysText) || 0;
+                    
+                    if (availableDaysText !== 'Loading...' && availableDaysText !== 'Error' && halfDays > availableDays) {
+                        document.getElementById('working-days').innerHTML = 
+                            `<strong class="text-danger">${halfDays} days</strong> <small class="text-danger">(Exceeds available: ${availableDays})</small>`;
+                    } else {
+                        document.getElementById('working-days').innerHTML = `<strong>${halfDays} days</strong> <small class="text-muted">(Half Day)</small>`;
+                    }
+                } else {
+                    // Check balance in real-time for full days
+                    const availableDaysText = document.getElementById('available-days').textContent;
+                    const availableDays = parseFloat(availableDaysText) || 0;
+                    
+                    if (availableDaysText !== 'Loading...' && availableDaysText !== 'Error' && workingDays > availableDays) {
+                        document.getElementById('working-days').innerHTML = 
+                            `<strong class="text-danger">${workingDays} days</strong> <small class="text-danger">(Exceeds available: ${availableDays})</small>`;
+                    } else {
+                        document.getElementById('working-days').innerHTML = `<strong>${workingDays} days</strong>`;
+                    }
+                }
+            } else {
+                document.getElementById('working-days').innerHTML = '<strong>0 days</strong>';
+            }
+        }
+
+        async function handleSubmit(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData.entries());
+            
+            // Validate leave duration
+            if (!data.leave_duration) {
+                showAlert('danger', 'Please select a leave duration');
+                return;
+            }
+            
+            // For half-day leave, ensure start and end dates are the same
+            if ((data.leave_duration === 'half_day_morning' || data.leave_duration === 'half_day_afternoon') && 
+                data.start_date !== data.end_date) {
+                data.end_date = data.start_date;
+            }
+            
+            // Calculate days requested with Saturday as half-day
+            const startDate = new Date(data.start_date);
+            const endDate = new Date(data.end_date);
+            let daysRequested = 0;
+            const current = new Date(startDate);
+            
+            while (current <= endDate) {
+                const dayOfWeek = current.getDay();
+                if (dayOfWeek !== 0) { // Not Sunday (0)
+                    if (dayOfWeek === 6) { // Saturday (6) - count as half day
+                        daysRequested += 0.5;
+                    } else { // Monday to Friday - count as full day
+                        daysRequested++;
+                    }
+                }
+                current.setDate(current.getDate() + 1);
+            }
+            
+            // Apply half-day calculation
+            if (data.leave_duration === 'half_day_morning' || data.leave_duration === 'half_day_afternoon') {
+                daysRequested = daysRequested * 0.5;
+            }
+            
+            data.days_requested = daysRequested;
+            
+            // Check leave balance before submitting
+            const availableDaysText = document.getElementById('available-days').textContent;
+            const availableDays = parseInt(availableDaysText) || 0;
+            
+            if (availableDaysText === 'Error' || availableDaysText === 'Loading...') {
+                showAlert('warning', 'Please wait for leave balance to load before submitting your request.');
+                return;
+            }
+            
+            if (daysRequested > availableDays) {
+                // Get more details for better error message
+                const annualEntitlement = document.getElementById('annual-entitlement').textContent || '22';
+                const daysUsed = document.getElementById('total-used').textContent || '0';
+                
+                showAlert('danger', 
+                    `Insufficient leave balance!<br>` +
+                    `• You are requesting: <strong>${daysRequested} days</strong><br>` +
+                    `• Available balance: <strong>${availableDays} days</strong><br>` +
+                    `• Annual entitlement: ${annualEntitlement} days<br>` +
+                    `• Already used: ${daysUsed} days<br><br>` +
+                    `Please reduce your request or wait for more leave days to become available.`
+                );
+                return;
+            }
+            
+            try {
+                const response = await fetchApi('/api/leave-request', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert('success', 'Leave request submitted successfully! You will be notified once it is reviewed.');
+                    document.getElementById('leaveRequestForm').reset();
+                    document.getElementById('working-days').innerHTML = '<strong>0 days</strong>';
+                    
+                    // Reload leave balance after successful submission
+                    setTimeout(() => {
+                        loadLeaveBalance();
+                    }, 1000);
+                } else {
+                    showAlert('danger', result.error || 'Failed to submit leave request');
+                }
+            } catch (error) {
+                console.error('Error submitting leave request:', error);
+                showAlert('danger', 'An error occurred while submitting the request');
+            }
+        }
+
+        function showAlert(type, message) {
+            const alertContainer = document.getElementById('alert-container');
+            alertContainer.innerHTML = `
+                <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                    <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-triangle'} me-2"></i>
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            `;
+        }
+
+        async function logout() {
+            try {
+                await fetchApi('/api/logout', { method: 'POST' });
+                window.location.href = window.configManager.getServerUrl() + '/';
+            } catch (error) {
+                console.error('Logout error:', error);
+                window.location.href = window.configManager.getServerUrl() + '/';
+            }
+        }
+
+        // Mobile navigation toggle
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('show');
+        }
+
+        // Close sidebar when clicking outside on mobile
+        document.addEventListener('click', function(event) {
+            const sidebar = document.getElementById('sidebar');
+            const toggle = document.querySelector('.mobile-nav-toggle');
+            
+            if (window.innerWidth <= 768 && 
+                !sidebar.contains(event.target) && 
+                !toggle.contains(event.target) && 
+                sidebar.classList.contains('show')) {
+                sidebar.classList.remove('show');
+            }
+        });
+    </script>
+
+    <!-- Copyright Footer -->
+    <footer class="bg-dark text-white py-2 mt-4">
+        <div class="container text-center">
+            <small>
+                © 2025/26 Employee Management System. All rights reserved. | Prepared by Wondwosen Tefera
+            </small>
+        </div>
+    </footer>
+</body>
+</html>
