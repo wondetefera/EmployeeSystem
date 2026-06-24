@@ -14,11 +14,13 @@ try {
     console.log('Warning: Could not load config.json, using defaults');
 }
 
-// Server configuration with defaults
+// Server configuration with defaults - UPDATED FOR CLOUD/RENDER DEPLOYMENT
 const SERVER_CONFIG = {
-    host: config.server?.host || 'localhost',
-    port: config.server?.port || 3000,
-    allowExternalConnections: config.server?.allowExternalConnections || false
+    // Cloud platforms (Render, Heroku, etc.) require binding to 0.0.0.0
+    // Use environment variable PORT if available (cloud), otherwise use config or default
+    host: process.env.PORT ? '0.0.0.0' : (config.server?.host || 'localhost'),
+    port: process.env.PORT || config.server?.port || 3000,
+    allowExternalConnections: process.env.PORT ? true : (config.server?.allowExternalConnections || false)
 };
 
 // MIME types
@@ -3259,27 +3261,38 @@ function handleTestConfig(req, res, data) {
     }
 }
 
-// Start server with configuration
-const serverHost = SERVER_CONFIG.allowExternalConnections ? '0.0.0.0' : SERVER_CONFIG.host;
+// Start server with configuration - UPDATED FOR CLOUD DEPLOYMENT
+// When running on cloud platforms, SERVER_CONFIG.host will already be '0.0.0.0'
+// For local, respect the allowExternalConnections setting
+const serverHost = SERVER_CONFIG.host === '0.0.0.0' ? '0.0.0.0' : 
+                   (SERVER_CONFIG.allowExternalConnections ? '0.0.0.0' : SERVER_CONFIG.host);
 
 server.listen(SERVER_CONFIG.port, serverHost, () => {
-    console.log(`🚀 Employee Management System running on http://${SERVER_CONFIG.host}:${SERVER_CONFIG.port}`);
-    console.log(`🏠 Application: http://${SERVER_CONFIG.host}:${SERVER_CONFIG.port}`);
-    console.log('');
-    console.log('Server Configuration:');
-    console.log(`- Host: ${SERVER_CONFIG.host}`);
-    console.log(`- Port: ${SERVER_CONFIG.port}`);
-    console.log(`- External Access: ${SERVER_CONFIG.allowExternalConnections ? 'Enabled' : 'Disabled'}`);
-    console.log(`- Binding to: ${serverHost}`);
-    console.log('');
-    console.log('Network Access URLs:');
-    console.log(`- Local: http://localhost:${SERVER_CONFIG.port}`);
-    console.log(`- Network: http://10.192.230.251:${SERVER_CONFIG.port}`);
-    console.log('');
-    console.log('Default Login Credentials:');
-    console.log('- Admin: admin@company.com / admin123');
-    console.log('- Manager: manager@company.com / manager123');
-    console.log('- Employee: employee@company.com / employee123');
+    const isCloudPlatform = !!process.env.PORT;
+    
+    console.log(`🚀 Employee Management System running on http://${serverHost}:${SERVER_CONFIG.port}`);
+    
+    if (isCloudPlatform) {
+        console.log('☁️  Running in CLOUD/PRODUCTION mode');
+        console.log(`✅ Server bound to ${serverHost}:${SERVER_CONFIG.port}`);
+    } else {
+        console.log(`🏠 Application: http://${SERVER_CONFIG.host}:${SERVER_CONFIG.port}`);
+        console.log('');
+        console.log('Server Configuration:');
+        console.log(`- Host: ${SERVER_CONFIG.host}`);
+        console.log(`- Port: ${SERVER_CONFIG.port}`);
+        console.log(`- External Access: ${SERVER_CONFIG.allowExternalConnections ? 'Enabled' : 'Disabled'}`);
+        console.log(`- Binding to: ${serverHost}`);
+        console.log('');
+        console.log('Network Access URLs:');
+        console.log(`- Local: http://localhost:${SERVER_CONFIG.port}`);
+        console.log(`- Network: http://10.192.230.251:${SERVER_CONFIG.port}`);
+        console.log('');
+        console.log('Default Login Credentials:');
+        console.log('- Admin: admin@company.com / admin123');
+        console.log('- Manager: manager@company.com / manager123');
+        console.log('- Employee: employee@company.com / employee123');
+    }
 });
 
 module.exports = server;
