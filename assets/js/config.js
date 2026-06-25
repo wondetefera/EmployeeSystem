@@ -76,13 +76,22 @@ class ConfigManager {
 
     /**
      * Update server URL based on configuration
+     * For cloud deployment, use relative paths (same domain as the page)
      */
     updateServerUrl() {
+        // On cloud platforms, API is on same domain as frontend - use relative paths
+        // Locally, may need explicit host:port for network access
         if (this.config && this.config.server) {
             const { host, port } = this.config.server;
-            this.serverUrl = `http://${host}:${port}`;
+            // Use relative path if running on production/cloud (no explicit localhost)
+            if (host === '0.0.0.0' || window.location.hostname !== 'localhost') {
+                this.serverUrl = ''; // Empty = relative to current domain
+            } else {
+                this.serverUrl = `http://${host}:${port}`;
+            }
         } else {
-            this.serverUrl = `http://localhost:8080`;
+            // Default: use relative paths (works on both local and cloud)
+            this.serverUrl = '';
         }
     }
 
@@ -90,7 +99,7 @@ class ConfigManager {
      * Get server URL for API calls
      */
     getServerUrl() {
-        return this.serverUrl || `http://localhost:8080`;
+        return this.serverUrl || '';
     }
 
     /**

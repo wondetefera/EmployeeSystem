@@ -1649,7 +1649,7 @@
         // Payroll System Functions
         async function loadPayrollSummary() {
             try {
-                const response = await fetch('/api/employees');
+                const response = await fetchApi('/api/employees');
                 const data = await response.json();
                 
                 if (data.success) {
