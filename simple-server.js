@@ -3,6 +3,11 @@ const fs = require('fs');
 const path = require('path');
 const url = require('url');
 const zlib = require('zlib');
+const nodemailer = require('nodemailer');
+const cron = require('node-cron');
+
+// Load environment variables
+require('dotenv').config();
 
 // Load configuration
 let config = {};
@@ -22,6 +27,45 @@ const SERVER_CONFIG = {
     port: process.env.PORT || config.server?.port || 3000,
     allowExternalConnections: process.env.PORT ? true : (config.server?.allowExternalConnections || false)
 };
+
+// Email configuration and transporter
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+    }
+});
+
+// Email sending function
+async function sendEmail(subject, text) {
+    try {
+        // Validate email configuration
+        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+            console.error('❌ Email configuration missing. Please set EMAIL_USER and EMAIL_PASS environment variables.');
+            return { success: false, error: 'Email configuration missing' };
+        }
+
+        await transporter.sendMail({
+            from: process.env.EMAIL_USER,
+            to: process.env.EMAIL_USER, // Send to yourself (you can change this)
+            subject: subject,
+            text: text,
+            html: `<div style="font-family: Arial, sans-serif; padding: 20px;">
+                <h2>${subject}</h2>
+                <p>${text}</p>
+                <hr>
+                <p style="color: #666; font-size: 12px;">Sent from Employee Management System</p>
+            </div>`
+        });
+        
+        console.log('✅ Report email sent successfully');
+        return { success: true };
+    } catch (error) {
+        console.error('❌ Error sending email:', error);
+        return { success: false, error: error.message };
+    }
+}
 
 // MIME types
 const mimeTypes = {
@@ -297,6 +341,8 @@ function handleAPI(req, res, pathname) {
                 handleBackupDownload(req, res);
             } else if (pathname === '/api/backup/download/excel' && req.method === 'GET') {
                 handleBackupDownloadExcel(req, res);
+            } else if (pathname === '/api/send-report' && req.method === 'POST') {
+                handleSendReport(req, res);
             } else {
                 console.log(`❌ No matching route found for: ${req.method} ${pathname}`);
                 res.writeHead(404);
@@ -3257,6 +3303,69 @@ function handleTestConfig(req, res, data) {
         res.end(JSON.stringify({ 
             error: 'Failed to test configuration',
             message: error.message 
+        }));
+    }
+}
+
+// Handler for sending email reports
+async function handleSendReport(req, res) {
+    const session = getSession(req);
+    
+    // Only authenticated users can send reports
+    if (!session) {
+        res.writeHead(401);
+        res.end(JSON.stringify({ error: 'Not authenticated' }));
+        return;
+    }
+    
+    try {
+        // Get today's date for the report
+        const today = new Date().toISOString().split('T')[0];
+        
+        // Generate attendance summary
+        const todayAttendance = attendanceRecords.filter(record => record.date === today);
+        const totalPresent = todayAttendance.length;
+        const totalEmployees = employees.length;
+        
+        // Create report text
+        const reportText = `
+Daily Attendance Report - ${today}
+
+Total Employees: ${totalEmployees}
+Present Today: ${totalPresent}
+Absent: ${totalEmployees - totalPresent}
+
+Recent Attendance Records:
+${todayAttendance.slice(0, 5).map(record => 
+    `- ${record.employee_name}: ${record.total_hours} hours`
+).join('\n')}
+
+This report was generated automatically by the Employee Management System.
+        `.trim();
+        
+        // Send the email
+        const result = await sendEmail(`Daily Attendance Report - ${today}`, reportText);
+        
+        if (result.success) {
+            res.writeHead(200);
+            res.end(JSON.stringify({ 
+                success: true, 
+                message: 'Email report sent successfully!' 
+            }));
+        } else {
+            res.writeHead(500);
+            res.end(JSON.stringify({ 
+                success: false, 
+                error: result.error,
+                message: 'Failed to send email. Please check your email configuration.' 
+            }));
+        }
+    } catch (error) {
+        console.error('Error in handleSendReport:', error);
+        res.writeHead(500);
+        res.end(JSON.stringify({ 
+            success: false, 
+            error: error.message 
         }));
     }
 }
