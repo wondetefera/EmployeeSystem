@@ -398,30 +398,38 @@ function handleServerInfo(req, res) {
     }));
 }
 
-function handleLogin(req, res, data) {
+async function handleLogin(req, res, data) {
     const { email, password } = data;
     
     console.log(`🔐 Login attempt: ${email} from ${req.connection.remoteAddress}`);
-    console.log(`📊 Available users: ${Object.keys(users).join(', ')}`);
     
-    const user = users[email];
-    
-    if (user && user.password === password) {
-        const sessionData = {
-            user_id: user.id,
-            email: email,
-            role: user.role
-        };
+    try {
+        // Query database for user by email using parameterized SELECT query
+        const user = USE_DATABASE 
+            ? await dbOps.getUserByEmail(email)
+            : users[email]; // Fallback to file-based for local dev
         
-        const sessionId = setSession(res, sessionData);
-        console.log(`✅ Login successful for ${email}, session: ${sessionId}`);
-        
-        res.writeHead(200);
-        res.end(JSON.stringify({ success: true, redirect: '/dashboard' }));
-    } else {
-        console.log(`Login failed for ${email}`);
-        res.writeHead(200);
-        res.end(JSON.stringify({ success: false, message: 'Invalid credentials' }));
+        if (user && user.password === password) {
+            const sessionData = {
+                user_id: user.id,
+                email: email,
+                role: user.role
+            };
+            
+            const sessionId = setSession(res, sessionData);
+            console.log(`✅ Login successful for ${email}, session: ${sessionId}`);
+            
+            res.writeHead(200);
+            res.end(JSON.stringify({ success: true, redirect: '/dashboard' }));
+        } else {
+            console.log(`❌ Login failed for ${email}`);
+            res.writeHead(200);
+            res.end(JSON.stringify({ success: false, message: 'Invalid credentials' }));
+        }
+    } catch (error) {
+        console.error('❌ Database error during login:', error);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Database error during authentication' }));
     }
 }
 
@@ -708,7 +716,7 @@ function timeToMinutes(timeStr) {
     return hours * 60 + minutes;
 }
 
-function handleTodayAttendance(req, res) {
+async function handleTodayAttendance(req, res) {
     const session = getSession(req);
     
     if (!session) {
@@ -717,25 +725,37 @@ function handleTodayAttendance(req, res) {
         return;
     }
     
-    const currentDate = new Date().toISOString().split('T')[0];
-    const employee = employees.find(emp => emp.email === session.email);
-    
-    if (!employee) {
-        res.writeHead(404);
-        res.end(JSON.stringify({ error: 'Employee not found' }));
-        return;
+    try {
+        const currentDate = new Date().toISOString().split('T')[0];
+        
+        // Get employee from database or file
+        const employee = USE_DATABASE
+            ? (await dbOps.getAllEmployees()).find(emp => emp.email === session.email)
+            : employees.find(emp => emp.email === session.email);
+        
+        if (!employee) {
+            res.writeHead(404);
+            res.end(JSON.stringify({ error: 'Employee not found' }));
+            return;
+        }
+        
+        // Find today's attendance record
+        const todayRecord = USE_DATABASE
+            ? await dbOps.getTodayAttendance(employee.id, currentDate)
+            : attendanceRecords.find(record => 
+                record.employee_id === employee.id && record.date === currentDate
+            );
+        
+        res.writeHead(200);
+        res.end(JSON.stringify({ 
+            success: true, 
+            data: todayRecord || null
+        }));
+    } catch (error) {
+        console.error('❌ Error fetching today attendance:', error);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to fetch attendance' }));
     }
-    
-    // Find today's attendance record
-    const todayRecord = attendanceRecords.find(record => 
-        record.employee_id === employee.id && record.date === currentDate
-    );
-    
-    res.writeHead(200);
-    res.end(JSON.stringify({ 
-        success: true, 
-        data: todayRecord || null
-    }));
 }
 
 function handleUpdateAttendance(req, res, pathname, data) {
@@ -1575,10 +1595,10 @@ function saveDataImmediate() {
     });
 }
 
-// Load initial data
+// Load initial data (only used when USE_DATABASE is false)
 const initialData = loadData();
-const employees = initialData.employees;
-const users = initialData.users;
+let employees = initialData.employees;
+let users = initialData.users;
 let leaveRequests = initialData.leaveRequests;
 let attendanceRecords = initialData.attendanceRecords;
 let notifications = initialData.notifications || [];
@@ -1594,22 +1614,24 @@ global.attendancePolicy = initialData.attendancePolicy || {
     early_tolerance: 15
 };
 
-// Migration: Add default salary to employees that don't have one
-let migrationNeeded = false;
-employees.forEach(emp => {
-    if (!emp.hasOwnProperty('salary') || emp.salary === null || emp.salary === undefined) {
-        emp.salary = 5000.00; // Default salary in ETB
-        migrationNeeded = true;
-        console.log(`Added default salary to employee: ${buildEmployeeName(emp)}`);
-    }
-});
+// Migration: Add default salary to employees that don't have one (file-based mode only)
+if (!USE_DATABASE) {
+    let migrationNeeded = false;
+    employees.forEach(emp => {
+        if (!emp.hasOwnProperty('salary') || emp.salary === null || emp.salary === undefined) {
+            emp.salary = 5000.00; // Default salary in ETB
+            migrationNeeded = true;
+            console.log(`Added default salary to employee: ${buildEmployeeName(emp)}`);
+        }
+    });
 
-if (migrationNeeded) {
-    console.log('Salary migration completed. Saving data...');
-    saveData();
+    if (migrationNeeded) {
+        console.log('Salary migration completed. Saving data...');
+        saveData();
+    }
 }
 
-function handleGetEmployees(req, res) {
+async function handleGetEmployees(req, res) {
     const session = getSession(req);
     if (!session) {
         res.writeHead(401);
@@ -1617,33 +1639,42 @@ function handleGetEmployees(req, res) {
         return;
     }
 
-    let employeeData = employees;
+    try {
+        // Get employees from database or file-based storage
+        let employeeData = USE_DATABASE 
+            ? await dbOps.getAllEmployees()
+            : employees;
 
-    // Strict role-based filtering
-    if (session.role === 'employee') {
-        // Employees can ONLY see their own data
-        employeeData = employees.filter(emp => emp.email === session.email);
-    } else if (session.role === 'manager') {
-        // Managers can see all employees but with limited edit permissions
-        employeeData = employees;
-    } else if (session.role === 'admin') {
-        // Admins can see all employees with full permissions
-        employeeData = employees;
+        // Strict role-based filtering
+        if (session.role === 'employee') {
+            // Employees can ONLY see their own data
+            employeeData = employeeData.filter(emp => emp.email === session.email);
+        } else if (session.role === 'manager') {
+            // Managers can see all employees but with limited edit permissions
+            employeeData = employeeData;
+        } else if (session.role === 'admin') {
+            // Admins can see all employees with full permissions
+            employeeData = employeeData;
+        }
+
+        // Add current leave entitlement calculation and role-based permissions
+        const enrichedData = employeeData.map(emp => ({
+            ...emp,
+            current_leave_entitlement: calculateCurrentLeaveEntitlement(emp),
+            canEdit: canEditEmployee(session, emp),
+            canView: canViewEmployee(session, emp)
+        }));
+
+        res.writeHead(200);
+        res.end(JSON.stringify({ success: true, data: enrichedData, userRole: session.role }));
+    } catch (error) {
+        console.error('❌ Database error in handleGetEmployees:', error);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to fetch employees' }));
     }
-
-    // Add current leave entitlement calculation and role-based permissions
-    const enrichedData = employeeData.map(emp => ({
-        ...emp,
-        current_leave_entitlement: calculateCurrentLeaveEntitlement(emp),
-        canEdit: canEditEmployee(session, emp),
-        canView: canViewEmployee(session, emp)
-    }));
-
-    res.writeHead(200);
-    res.end(JSON.stringify({ success: true, data: enrichedData, userRole: session.role }));
 }
 
-function handleAddEmployee(req, res, data) {
+async function handleAddEmployee(req, res, data) {
     const session = getSession(req);
     
     // ONLY ADMIN can add employees (including other admins and managers)
@@ -1673,69 +1704,92 @@ function handleAddEmployee(req, res, data) {
         return;
     }
 
-    // Check if email already exists
-    if (users[data.email]) {
-        res.writeHead(400);
-        res.end(JSON.stringify({ error: 'Email address already exists' }));
-        return;
-    }
-
-    // Generate new employee ID
-    const maxId = employees.length > 0 ? Math.max(...employees.map(emp => emp.id)) : 0;
-    const currentYear = new Date().getFullYear();
-    const newEmployee = {
-        id: maxId + 1,
-        employee_id: `${currentYear}${String(maxId + 1).padStart(4, '0')}`,
-        first_name: data.first_name.trim(),
-        father_name: data.father_name ? data.father_name.trim() : '',
-        gfather_name: data.gfather_name ? data.gfather_name.trim() : '',
-        email: data.email.trim().toLowerCase(),
-        department: data.department.trim(),
-        job_title: data.job_title.trim(),
-        salary: parseFloat(data.salary),
-        start_date: data.start_date,
-        phone: data.phone || '',
-        status: 'active',
-        annual_leave_days: parseInt(data.annual_leave_days) || 22,
-        leave_start_year: new Date().getFullYear(),
-        created_at: new Date().toISOString(),
-        created_by: session.email
-    };
-
-    // Generate temporary password
-    const tempPassword = generateTempPassword();
-    
-    // Determine role (admin can assign roles)
-    const assignedRole = data.role && ['admin', 'manager', 'employee'].includes(data.role) 
-        ? data.role 
-        : 'employee';
-    
-    // Create user account for the new employee
-    users[data.email.trim().toLowerCase()] = {
-        id: newEmployee.id,
-        role: assignedRole,
-        password: tempPassword
-    };
-
-    employees.push(newEmployee);
-    
-    // Save data to file
-    saveData();
-    
-    console.log(`New ${assignedRole} added: ${buildEmployeeName(newEmployee)}`);
-    console.log(`Login credentials created - Email: ${data.email}, Password: ${tempPassword}, Role: ${assignedRole}`);
-
-    res.writeHead(200);
-    res.end(JSON.stringify({ 
-        success: true, 
-        data: newEmployee,
-        loginCredentials: {
-            email: data.email.trim().toLowerCase(),
-            password: tempPassword,
-            role: assignedRole,
-            message: `New ${assignedRole} account created successfully. Please share these credentials securely.`
+    try {
+        // Check if email already exists
+        if (USE_DATABASE) {
+            const existingUser = await dbOps.getUserByEmail(data.email.trim().toLowerCase());
+            if (existingUser) {
+                res.writeHead(400);
+                res.end(JSON.stringify({ error: 'Email address already exists' }));
+                return;
+            }
+        } else {
+            if (users[data.email]) {
+                res.writeHead(400);
+                res.end(JSON.stringify({ error: 'Email address already exists' }));
+                return;
+            }
         }
-    }));
+
+        // Generate new employee ID
+        const maxId = USE_DATABASE 
+            ? (await dbOps.getAllEmployees()).reduce((max, emp) => Math.max(max, emp.id), 0)
+            : (employees.length > 0 ? Math.max(...employees.map(emp => emp.id)) : 0);
+        
+        const currentYear = new Date().getFullYear();
+        const newEmployee = {
+            id: maxId + 1,
+            employee_id: `${currentYear}${String(maxId + 1).padStart(4, '0')}`,
+            first_name: data.first_name.trim(),
+            father_name: data.father_name ? data.father_name.trim() : '',
+            gfather_name: data.gfather_name ? data.gfather_name.trim() : '',
+            email: data.email.trim().toLowerCase(),
+            department: data.department.trim(),
+            job_title: data.job_title.trim(),
+            salary: parseFloat(data.salary),
+            start_date: data.start_date,
+            phone: data.phone || '',
+            status: 'active',
+            annual_leave_days: parseInt(data.annual_leave_days) || 22,
+            leave_start_year: new Date().getFullYear(),
+            created_at: new Date().toISOString(),
+            created_by: session.email
+        };
+
+        // Generate temporary password
+        const tempPassword = generateTempPassword();
+        
+        // Determine role (admin can assign roles)
+        const assignedRole = data.role && ['admin', 'manager', 'employee'].includes(data.role) 
+            ? data.role 
+            : 'employee';
+        
+        const userData = {
+            id: newEmployee.id,
+            email: data.email.trim().toLowerCase(),
+            role: assignedRole,
+            password: tempPassword
+        };
+
+        if (USE_DATABASE) {
+            // Use database transaction to insert both employee and user
+            await dbOps.addEmployee(newEmployee, userData);
+        } else {
+            // File-based fallback
+            users[data.email.trim().toLowerCase()] = userData;
+            employees.push(newEmployee);
+            saveData();
+        }
+        
+        console.log(`New ${assignedRole} added: ${buildEmployeeName(newEmployee)}`);
+        console.log(`Login credentials created - Email: ${data.email}, Password: ${tempPassword}, Role: ${assignedRole}`);
+
+        res.writeHead(200);
+        res.end(JSON.stringify({ 
+            success: true, 
+            data: newEmployee,
+            loginCredentials: {
+                email: data.email.trim().toLowerCase(),
+                password: tempPassword,
+                role: assignedRole,
+                message: `New ${assignedRole} account created successfully. Please share these credentials securely.`
+            }
+        }));
+    } catch (error) {
+        console.error('❌ Error adding employee:', error);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to add employee' }));
+    }
 }
 
 // Helper function to generate temporary password
@@ -1779,7 +1833,7 @@ function canViewEmployee(session, employee) {
     return false;
 }
 
-function handleGetDepartments(req, res) {
+async function handleGetDepartments(req, res) {
     const session = getSession(req);
     if (!session) {
         res.writeHead(401);
@@ -1787,8 +1841,18 @@ function handleGetDepartments(req, res) {
         return;
     }
 
-    res.writeHead(200);
-    res.end(JSON.stringify({ success: true, data: departments }));
+    try {
+        const depts = USE_DATABASE
+            ? await dbOps.getDepartments()
+            : departments;
+        
+        res.writeHead(200);
+        res.end(JSON.stringify({ success: true, data: depts }));
+    } catch (error) {
+        console.error('❌ Error fetching departments:', error);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to fetch departments' }));
+    }
 }
 
 function handleAddDepartment(req, res, data) {
@@ -1955,7 +2019,7 @@ function handleLeaveRequest(req, res, data) {
     res.end(JSON.stringify({ success: true, data: newRequest }));
 }
 
-function handleGetLeaveRequests(req, res) {
+async function handleGetLeaveRequests(req, res) {
     const session = getSession(req);
     if (!session) {
         res.writeHead(401);
@@ -1963,16 +2027,40 @@ function handleGetLeaveRequests(req, res) {
         return;
     }
 
-    let filteredRequests = leaveRequests;
-    
-    // Filter by role
-    if (session.role === 'employee') {
-        const employee = employees.find(emp => emp.email === session.email);
-        filteredRequests = leaveRequests.filter(req => req.employee_id === (employee ? employee.id : session.user_id));
-    }
+    try {
+        if (USE_DATABASE) {
+            // Use database operations
+            let filters = {};
+            
+            // Filter by role - employees can only see their own requests
+            if (session.role === 'employee') {
+                const employee = await dbOps.getAllEmployees();
+                const currentEmployee = employee.find(emp => emp.email === session.email);
+                filters.employee_id = currentEmployee ? currentEmployee.id : session.user_id;
+            }
+            
+            const requests = await dbOps.getLeaveRequests(filters);
+            
+            res.writeHead(200);
+            res.end(JSON.stringify({ success: true, data: requests }));
+        } else {
+            // Fallback to file-based operations
+            let filteredRequests = leaveRequests;
+            
+            // Filter by role
+            if (session.role === 'employee') {
+                const employee = employees.find(emp => emp.email === session.email);
+                filteredRequests = leaveRequests.filter(req => req.employee_id === (employee ? employee.id : session.user_id));
+            }
 
-    res.writeHead(200);
-    res.end(JSON.stringify({ success: true, data: filteredRequests }));
+            res.writeHead(200);
+            res.end(JSON.stringify({ success: true, data: filteredRequests }));
+        }
+    } catch (error) {
+        console.error('Error fetching leave requests:', error);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to fetch leave requests' }));
+    }
 }
 
 function handleUpdateLeaveRequest(req, res, pathname, data) {
@@ -2817,7 +2905,7 @@ function sendLeaveStatusNotification(leaveRequest, approverEmail, newStatus) {
 }
 
 // Notification handlers
-function handleGetNotifications(req, res) {
+async function handleGetNotifications(req, res) {
     const session = getSession(req);
     
     if (!session) {
@@ -2826,19 +2914,29 @@ function handleGetNotifications(req, res) {
         return;
     }
     
-    // Filter notifications for the current user
-    const userNotifications = notifications.filter(notification => 
-        notification.recipient_email === session.email
-    );
-    
-    // Sort by creation date (newest first)
-    userNotifications.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    
-    res.writeHead(200);
-    res.end(JSON.stringify({ 
-        success: true, 
-        data: userNotifications 
-    }));
+    try {
+        // Get notifications from database or file
+        const userNotifications = USE_DATABASE
+            ? await dbOps.getNotifications(session.email)
+            : notifications.filter(notification => 
+                notification.recipient_email === session.email
+            );
+        
+        // Sort by creation date (newest first) - only needed for file-based
+        if (!USE_DATABASE) {
+            userNotifications.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        }
+        
+        res.writeHead(200);
+        res.end(JSON.stringify({ 
+            success: true, 
+            data: userNotifications 
+        }));
+    } catch (error) {
+        console.error('❌ Error fetching notifications:', error);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to fetch notifications' }));
+    }
 }
 
 function handleSendNotification(req, res, data) {
