@@ -545,7 +545,7 @@ function validateAttendanceTime(action, type, currentTime, dayOfWeek) {
     return { valid: true };
 }
 
-function handleAttendance(req, res, data) {
+async function handleAttendance(req, res, data) {
     console.log('🔍 DEBUG: handleAttendance called with:', { action: data.action, type: data.type });
     
     const session = getSession(req);
@@ -556,118 +556,140 @@ function handleAttendance(req, res, data) {
         return;
     }
     
-    const { action, type } = data;
-    const now = new Date();
-    const currentTime = now.toTimeString().split(' ')[0].substring(0, 5); // HH:MM format
-    const currentDate = now.toISOString().split('T')[0];
-    const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-    
-    const employee = employees.find(emp => emp.email === session.email);
-    if (!employee) {
-        res.writeHead(404);
-        res.end(JSON.stringify({ error: 'Employee not found' }));
-        return;
-    }
-    
-    // Time-based validation rules
-    const timeValidation = validateAttendanceTime(action, type, currentTime, dayOfWeek);
-    if (!timeValidation.valid) {
-        res.writeHead(400);
-        res.end(JSON.stringify({ 
-            error: timeValidation.error,
-            message: timeValidation.message
-        }));
-        return;
-    }
-    
-    // Find or create today's attendance record
-    let todayRecord = attendanceRecords.find(record => 
-        record.employee_id === employee.id && record.date === currentDate
-    );
-    
-    if (!todayRecord) {
-        const maxId = attendanceRecords.length > 0 ? Math.max(...attendanceRecords.map(rec => rec.id)) : 0;
-        todayRecord = {
-            id: maxId + 1,
-            employee_id: employee.id,
-            employee_name: buildEmployeeName(employee),
-            date: currentDate,
-            morning_checkin: null,
-            morning_checkout: null,
-            afternoon_checkin: null,
-            afternoon_checkout: null,
-            total_hours: 0,
-            status: 'present',
-            created_at: new Date().toISOString()
-        };
-        attendanceRecords.push(todayRecord);
-    }
-    
-    // Update the appropriate field
-    const fieldName = `${type}_${action === 'checkin' ? 'checkin' : 'checkout'}`;
-    
-    // Validation: Check if already checked in/out
-    if (todayRecord[fieldName]) {
-        res.writeHead(400);
-        res.end(JSON.stringify({ 
-            error: `You have already ${action === 'checkin' ? 'checked in' : 'checked out'} for ${type}`,
-            message: `Already ${action === 'checkin' ? 'checked in' : 'checked out'} at ${todayRecord[fieldName]}`
-        }));
-        return;
-    }
-    
-    // Enhanced validation rules for proper workflow
-    if (action === 'checkout') {
-        // Rule 1: Must check in first before checking out
-        const checkinField = `${type}_checkin`;
-        if (!todayRecord[checkinField]) {
-            res.writeHead(400);
-            res.end(JSON.stringify({ 
-                error: `You must check in for ${type} before checking out`,
-                message: `Please check in for ${type} first`
-            }));
+    try {
+        const { action, type } = data;
+        const now = new Date();
+        const currentTime = now.toTimeString().split(' ')[0].substring(0, 5); // HH:MM format
+        const currentDate = now.toISOString().split('T')[0];
+        const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+        
+        // Get employee from database or file
+        const employee = USE_DATABASE
+            ? (await dbOps.getAllEmployees()).find(emp => emp.email === session.email)
+            : employees.find(emp => emp.email === session.email);
+            
+        if (!employee) {
+            res.writeHead(404);
+            res.end(JSON.stringify({ error: 'Employee not found' }));
             return;
         }
-    }
-    
-    if (action === 'checkin' && type === 'afternoon') {
-        console.log('🔍 DEBUG: Afternoon check-in validation - morning_checkin:', todayRecord.morning_checkin, 'morning_checkout:', todayRecord.morning_checkout);
         
-        // Rule 2: Must check out from morning before checking in for afternoon (only if morning was started)
-        if (todayRecord.morning_checkin && !todayRecord.morning_checkout) {
-            console.log('🚫 DEBUG: Blocking afternoon check-in - morning session in progress');
+        // Time-based validation rules
+        const timeValidation = validateAttendanceTime(action, type, currentTime, dayOfWeek);
+        if (!timeValidation.valid) {
             res.writeHead(400);
             res.end(JSON.stringify({ 
-                error: 'You must check out from morning session before checking in for afternoon',
-                message: `Please check out from morning session first. You checked in at ${todayRecord.morning_checkin} but haven't checked out yet.`
+                error: timeValidation.error,
+                message: timeValidation.message
             }));
             return;
         }
         
-        // Rule 3: Allow afternoon check-in even if morning session was missed
-        // This allows employees to work afternoon-only shifts or make up for missed morning sessions
-        if (!todayRecord.morning_checkin) {
-            console.log('✅ DEBUG: Allowing afternoon check-in without morning session');
-            console.log(`Employee ${employee.employee_id} checking in for afternoon session without morning session`);
-            // This is now allowed - no error thrown
+        // Find or create today's attendance record
+        let todayRecord = USE_DATABASE
+            ? await dbOps.getTodayAttendance(employee.id, currentDate)
+            : attendanceRecords.find(record => 
+                record.employee_id === employee.id && record.date === currentDate
+            );
+        
+        if (!todayRecord) {
+            // Create new record
+            todayRecord = {
+                employee_id: employee.id,
+                employee_name: buildEmployeeName(employee),
+                date: currentDate,
+                morning_checkin: null,
+                morning_checkout: null,
+                afternoon_checkin: null,
+                afternoon_checkout: null,
+                total_hours: 0,
+                status: 'present',
+                created_at: new Date().toISOString()
+            };
+            
+            if (!USE_DATABASE) {
+                const maxId = attendanceRecords.length > 0 ? Math.max(...attendanceRecords.map(rec => rec.id)) : 0;
+                todayRecord.id = maxId + 1;
+                attendanceRecords.push(todayRecord);
+            }
         }
+        
+        // Update the appropriate field
+        const fieldName = `${type}_${action === 'checkin' ? 'checkin' : 'checkout'}`;
+        
+        // Validation: Check if already checked in/out
+        if (todayRecord[fieldName]) {
+            res.writeHead(400);
+            res.end(JSON.stringify({ 
+                error: `You have already ${action === 'checkin' ? 'checked in' : 'checked out'} for ${type}`,
+                message: `Already ${action === 'checkin' ? 'checked in' : 'checked out'} at ${todayRecord[fieldName]}`
+            }));
+            return;
+        }
+        
+        // Enhanced validation rules for proper workflow
+        if (action === 'checkout') {
+            // Rule 1: Must check in first before checking out
+            const checkinField = `${type}_checkin`;
+            if (!todayRecord[checkinField]) {
+                res.writeHead(400);
+                res.end(JSON.stringify({ 
+                    error: `You must check in for ${type} before checking out`,
+                    message: `Please check in for ${type} first`
+                }));
+                return;
+            }
+        }
+        
+        if (action === 'checkin' && type === 'afternoon') {
+            console.log('🔍 DEBUG: Afternoon check-in validation - morning_checkin:', todayRecord.morning_checkin, 'morning_checkout:', todayRecord.morning_checkout);
+            
+            // Rule 2: Must check out from morning before checking in for afternoon (only if morning was started)
+            if (todayRecord.morning_checkin && !todayRecord.morning_checkout) {
+                console.log('🚫 DEBUG: Blocking afternoon check-in - morning session in progress');
+                res.writeHead(400);
+                res.end(JSON.stringify({ 
+                    error: 'You must check out from morning session before checking in for afternoon',
+                    message: `Please check out from morning session first. You checked in at ${todayRecord.morning_checkin} but haven't checked out yet.`
+                }));
+                return;
+            }
+            
+            // Rule 3: Allow afternoon check-in even if morning session was missed
+            if (!todayRecord.morning_checkin) {
+                console.log('✅ DEBUG: Allowing afternoon check-in without morning session');
+                console.log(`Employee ${employee.employee_id} checking in for afternoon session without morning session`);
+            }
+        }
+        
+        // Update the record
+        todayRecord[fieldName] = currentTime;
+        
+        // Calculate total hours if both morning and afternoon sessions are complete
+        todayRecord.total_hours = calculateTotalHours(todayRecord);
+        
+        // Save to database or file
+        if (USE_DATABASE) {
+            await dbOps.recordAttendance(employee.id, type, action, currentTime, currentDate);
+        } else {
+            saveData();
+        }
+        
+        console.log(`${buildEmployeeName(employee)} - ${action} ${type} at ${currentTime}`);
+        
+        res.writeHead(200);
+        res.end(JSON.stringify({ 
+            success: true, 
+            message: `${type.charAt(0).toUpperCase() + type.slice(1)} ${action} recorded successfully at ${currentTime}`,
+            time: currentTime,
+            data: todayRecord
+        }));
+    } catch (error) {
+        console.error('❌ Error recording attendance:', error);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to record attendance' }));
     }
-    
-    // Update the record
-    todayRecord[fieldName] = currentTime;
-    
-    // Calculate total hours if both morning and afternoon sessions are complete
-    todayRecord.total_hours = calculateTotalHours(todayRecord);
-    
-    // Save data to file
-    saveData();
-    
-    console.log(`${buildEmployeeName(employee)} - ${action} ${type} at ${currentTime}`);
-    
-    res.writeHead(200);
-    res.end(JSON.stringify({ 
-        success: true, 
-        message: `${type.charAt(0).toUpperCase() + type.slice(1)} ${action} recorded successfully at ${currentTime}`,
+}
         time: currentTime,
         data: todayRecord
     }));
@@ -2364,7 +2386,7 @@ function handleResetPassword(req, res, data) {
     }));
 }
 
-function handleUpdateEmployee(req, res, pathname, data) {
+async function handleUpdateEmployee(req, res, pathname, data) {
     const session = getSession(req);
     if (!session) {
         res.writeHead(401);
@@ -2372,98 +2394,126 @@ function handleUpdateEmployee(req, res, pathname, data) {
         return;
     }
 
-    const employeeId = parseInt(pathname.split('/').pop());
-    const employeeIndex = employees.findIndex(emp => emp.id === employeeId);
+    try {
+        const employeeId = parseInt(pathname.split('/').pop());
+        
+        // Get employee from database or file
+        const allEmployees = USE_DATABASE ? await dbOps.getAllEmployees() : employees;
+        const employeeIndex = allEmployees.findIndex(emp => emp.id === employeeId);
 
-    if (employeeIndex === -1) {
-        res.writeHead(404);
-        res.end(JSON.stringify({ error: 'Employee not found' }));
-        return;
-    }
-
-    const targetEmployee = employees[employeeIndex];
-
-    // Strict role-based access control
-    if (session.role === 'employee') {
-        // Employees can ONLY edit their own profile and ONLY specific fields
-        if (targetEmployee.email !== session.email) {
-            res.writeHead(403);
-            res.end(JSON.stringify({ 
-                error: 'Access denied: You can only edit your own profile' 
-            }));
+        if (employeeIndex === -1) {
+            res.writeHead(404);
+            res.end(JSON.stringify({ error: 'Employee not found' }));
             return;
         }
-        
-        // Employees can only edit very limited fields
-        const allowedFields = ['phone'];
-        const filteredData = {};
-        allowedFields.forEach(field => {
-            if (data[field] !== undefined) {
-                filteredData[field] = data[field];
+
+        const targetEmployee = allEmployees[employeeIndex];
+
+        // Strict role-based access control
+        if (session.role === 'employee') {
+            // Employees can ONLY edit their own profile and ONLY specific fields
+            if (targetEmployee.email !== session.email) {
+                res.writeHead(403);
+                res.end(JSON.stringify({ 
+                    error: 'Access denied: You can only edit your own profile' 
+                }));
+                return;
             }
-        });
-        
-        if (Object.keys(filteredData).length === 0) {
-            res.writeHead(403);
-            res.end(JSON.stringify({ 
-                error: 'You can only update your phone number' 
-            }));
-            return;
-        }
-        
-        data = filteredData;
-    } else if (session.role === 'manager') {
-        // Managers can edit most fields but NOT sensitive ones
-        const restrictedFields = ['annual_leave_days', 'employee_id', 'start_date', 'status'];
-        restrictedFields.forEach(field => {
-            if (data[field] !== undefined) {
-                delete data[field];
+            
+            // Employees can only edit very limited fields
+            const allowedFields = ['phone'];
+            const filteredData = {};
+            allowedFields.forEach(field => {
+                if (data[field] !== undefined) {
+                    filteredData[field] = data[field];
+                }
+            });
+            
+            if (Object.keys(filteredData).length === 0) {
+                res.writeHead(403);
+                res.end(JSON.stringify({ 
+                    error: 'You can only update your phone number' 
+                }));
+                return;
             }
-        });
-        
-        // Managers cannot edit other managers or admins
-        const targetUser = Object.values(users).find(user => user.id === targetEmployee.id);
-        if (targetUser && (targetUser.role === 'admin' || targetUser.role === 'manager')) {
-            res.writeHead(403);
-            res.end(JSON.stringify({ 
-                error: 'Managers cannot edit other managers or administrators' 
-            }));
-            return;
+            
+            data = filteredData;
+        } else if (session.role === 'manager') {
+            // Managers can edit most fields but NOT sensitive ones
+            const restrictedFields = ['annual_leave_days', 'employee_id', 'start_date', 'status'];
+            restrictedFields.forEach(field => {
+                if (data[field] !== undefined) {
+                    delete data[field];
+                }
+            });
+            
+            // Managers cannot edit other managers or admins
+            const targetUser = USE_DATABASE
+                ? await dbOps.getUserByEmail(targetEmployee.email)
+                : Object.values(users).find(user => user.id === targetEmployee.id);
+                
+            if (targetUser && (targetUser.role === 'admin' || targetUser.role === 'manager')) {
+                res.writeHead(403);
+                res.end(JSON.stringify({ 
+                    error: 'Managers cannot edit other managers or administrators' 
+                }));
+                return;
+            }
         }
-    }
-    // Admins can edit all fields
+        // Admins can edit all fields
 
-    // Handle role updates (admin only)
-    if (data.role && session.role === 'admin') {
-        const targetUser = users[targetEmployee.email];
-        if (targetUser) {
-            targetUser.role = data.role;
+        // Handle role updates (admin only)
+        if (data.role && session.role === 'admin') {
+            if (USE_DATABASE) {
+                await dbOps.updateUserRole(targetEmployee.email, data.role);
+            } else {
+                const targetUser = users[targetEmployee.email];
+                if (targetUser) {
+                    targetUser.role = data.role;
+                }
+            }
             console.log(`Role updated for ${targetEmployee.email}: ${data.role}`);
+            delete data.role; // Remove from employee data as it's stored in users table
         }
-        delete data.role; // Remove from employee data as it's stored in users object
+
+        // Add update metadata
+        data.updated_at = new Date().toISOString();
+        data.updated_by = session.email;
+
+        // Update employee data
+        if (USE_DATABASE) {
+            await dbOps.updateEmployee(employeeId, data);
+            const updatedEmployee = await dbOps.getEmployeeById(employeeId);
+            
+            console.log(`Employee updated by ${session.email}: ${buildEmployeeName(updatedEmployee)}`);
+            
+            res.writeHead(200);
+            res.end(JSON.stringify({ 
+                success: true, 
+                data: updatedEmployee,
+                message: 'Employee updated successfully' 
+            }));
+        } else {
+            employees[employeeIndex] = { ...employees[employeeIndex], ...data };
+            saveData();
+            
+            console.log(`Employee updated by ${session.email}: ${buildEmployeeName(employees[employeeIndex])}`);
+            
+            res.writeHead(200);
+            res.end(JSON.stringify({ 
+                success: true, 
+                data: employees[employeeIndex],
+                message: 'Employee updated successfully' 
+            }));
+        }
+    } catch (error) {
+        console.error('❌ Error updating employee:', error);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to update employee' }));
     }
-
-    // Add update metadata
-    data.updated_at = new Date().toISOString();
-    data.updated_by = session.email;
-
-    // Update employee data
-    employees[employeeIndex] = { ...employees[employeeIndex], ...data };
-    
-    // Save data to file
-    saveData();
-    
-    console.log(`Employee updated by ${session.email}: ${buildEmployeeName(employees[employeeIndex])}`);
-
-    res.writeHead(200);
-    res.end(JSON.stringify({ 
-        success: true, 
-        data: employees[employeeIndex],
-        message: 'Employee updated successfully' 
-    }));
 }
 
-function handleDeleteEmployee(req, res, pathname) {
+async function handleDeleteEmployee(req, res, pathname) {
     const session = getSession(req);
     
     // ONLY ADMIN can delete employees
@@ -2475,66 +2525,80 @@ function handleDeleteEmployee(req, res, pathname) {
         return;
     }
 
-    const employeeId = parseInt(pathname.split('/').pop());
-    const employeeIndex = employees.findIndex(emp => emp.id === employeeId);
+    try {
+        const employeeId = parseInt(pathname.split('/').pop());
+        
+        // Get employee from database or file
+        const allEmployees = USE_DATABASE ? await dbOps.getAllEmployees() : employees;
+        const employeeIndex = allEmployees.findIndex(emp => emp.id === employeeId);
 
-    if (employeeIndex === -1) {
-        res.writeHead(404);
-        res.end(JSON.stringify({ error: 'Employee not found' }));
-        return;
-    }
+        if (employeeIndex === -1) {
+            res.writeHead(404);
+            res.end(JSON.stringify({ error: 'Employee not found' }));
+            return;
+        }
 
-    const targetEmployee = employees[employeeIndex];
+        const targetEmployee = allEmployees[employeeIndex];
 
-    // Prevent admin from deleting their own account
-    if (targetEmployee.email === session.email) {
-        res.writeHead(400);
+        // Prevent admin from deleting their own account
+        if (targetEmployee.email === session.email) {
+            res.writeHead(400);
+            res.end(JSON.stringify({ 
+                error: 'You cannot delete your own account' 
+            }));
+            return;
+        }
+
+        // Store employee info for logging before deletion
+        const deletedEmployee = { ...targetEmployee };
+
+        if (USE_DATABASE) {
+            // Use soft delete in database (sets status='inactive')
+            await dbOps.deleteEmployee(employeeId);
+        } else {
+            // Remove employee from employees array
+            employees.splice(employeeIndex, 1);
+
+            // Remove user account
+            if (users[targetEmployee.email]) {
+                delete users[targetEmployee.email];
+            }
+
+            // Remove related attendance records
+            for (let i = attendanceRecords.length - 1; i >= 0; i--) {
+                if (attendanceRecords[i].employee_id === employeeId) {
+                    attendanceRecords.splice(i, 1);
+                }
+            }
+
+            // Remove related leave requests
+            for (let i = leaveRequests.length - 1; i >= 0; i--) {
+                if (leaveRequests[i].employee_id === employeeId) {
+                    leaveRequests.splice(i, 1);
+                }
+            }
+
+            // Save data to file
+            saveData();
+        }
+
+        console.log(`Employee deleted by ${session.email}: ${buildEmployeeName(deletedEmployee)} (${deletedEmployee.email})`);
+
+        res.writeHead(200);
         res.end(JSON.stringify({ 
-            error: 'You cannot delete your own account' 
+            success: true, 
+            message: `Employee ${buildEmployeeName(deletedEmployee)} has been removed successfully`,
+            deletedEmployee: {
+                name: buildEmployeeName(deletedEmployee),
+                email: deletedEmployee.email,
+                employee_id: deletedEmployee.employee_id
+            }
         }));
-        return;
+    } catch (error) {
+        console.error('❌ Error deleting employee:', error);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to delete employee' }));
     }
-
-    // Store employee info for logging before deletion
-    const deletedEmployee = { ...targetEmployee };
-
-    // Remove employee from employees array
-    employees.splice(employeeIndex, 1);
-
-    // Remove user account
-    if (users[targetEmployee.email]) {
-        delete users[targetEmployee.email];
-    }
-
-    // Remove related attendance records
-    for (let i = attendanceRecords.length - 1; i >= 0; i--) {
-        if (attendanceRecords[i].employee_id === employeeId) {
-            attendanceRecords.splice(i, 1);
-        }
-    }
-
-    // Remove related leave requests
-    for (let i = leaveRequests.length - 1; i >= 0; i--) {
-        if (leaveRequests[i].employee_id === employeeId) {
-            leaveRequests.splice(i, 1);
-        }
-    }
-
-    // Save data to file
-    saveData();
-
-    console.log(`Employee deleted by ${session.email}: ${buildEmployeeName(deletedEmployee)} (${deletedEmployee.email})`);
-
-    res.writeHead(200);
-    res.end(JSON.stringify({ 
-        success: true, 
-        message: `Employee ${buildEmployeeName(deletedEmployee)} has been removed successfully`,
-        deletedEmployee: {
-            name: buildEmployeeName(deletedEmployee),
-            email: deletedEmployee.email,
-            employee_id: deletedEmployee.employee_id
-        }
-    }));
 }
 
 // PDF Export Handler
