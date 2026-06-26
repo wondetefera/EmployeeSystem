@@ -54,7 +54,8 @@ async function initializeDatabase() {
     keepAliveInitialDelay: 10000, // 10 seconds
     connectTimeout: 10000,      // 10 second connection timeout
     idleTimeout: 600000,        // 10 minute idle timeout
-    maxIdle: 5                  // Minimum 5 idle connections maintained
+    maxIdle: 5,                 // Minimum 5 idle connections maintained
+    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
   });
   
   // Log connection attempt (excluding password)
