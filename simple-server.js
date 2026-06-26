@@ -690,10 +690,6 @@ async function handleAttendance(req, res, data) {
         res.end(JSON.stringify({ error: 'Failed to record attendance' }));
     }
 }
-        time: currentTime,
-        data: todayRecord
-    }));
-}
 
 // Helper function to build full employee name
 function buildEmployeeName(employee) {
