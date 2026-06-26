@@ -620,6 +620,9 @@
                                             <button class="btn btn-outline-info" onclick="exportPayrollData()">
                                                 <i class="fas fa-download me-2"></i>Export Data
                                             </button>
+                                            <button class="btn btn-outline-warning" onclick="sendDailyReport()" id="sendReportBtn">
+                                                <i class="fas fa-envelope me-2"></i>Send Daily Report
+                                            </button>
                                         </div>
                                         <div class="mt-3">
                                             <div class="alert alert-light py-2">
@@ -1717,6 +1720,40 @@
                 document.getElementById('payroll-section').style.display = 'block';
                 document.getElementById('payroll-menu').style.display = 'block';
                 loadPayrollSummary();
+            }
+        }
+
+        // Send daily report via email
+        async function sendDailyReport() {
+            const btn = document.getElementById('sendReportBtn');
+            const originalText = btn.innerHTML;
+            
+            try {
+                // Disable button and show loading state
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Sending...';
+                
+                const response = await fetch('/api/send-report', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert('✅ Daily report email sent successfully!', 'success');
+                } else {
+                    showAlert('❌ Failed to send email: ' + (result.message || result.error), 'danger');
+                }
+            } catch (error) {
+                console.error('Error sending report:', error);
+                showAlert('❌ Error sending email report. Please try again.', 'danger');
+            } finally {
+                // Re-enable button and restore original text
+                btn.disabled = false;
+                btn.innerHTML = originalText;
             }
         }
     </script>

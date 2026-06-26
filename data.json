@@ -228,6 +228,24 @@
       "leave_start_year": 2026,
       "created_at": "2026-04-29T07:28:43.513Z",
       "created_by": "admin@company.com"
+    },
+    {
+      "id": 20,
+      "employee_id": "20260020",
+      "first_name": "sam",
+      "father_name": "sam",
+      "gfather_name": "sam",
+      "email": "sam@gmail.com",
+      "department": "Information Technology",
+      "job_title": "sr",
+      "salary": 50000,
+      "start_date": "2026-06-04",
+      "phone": "",
+      "status": "active",
+      "annual_leave_days": 22,
+      "leave_start_year": 2026,
+      "created_at": "2026-06-26T07:29:27.524Z",
+      "created_by": "wondwossentefera@gmail.com"
     }
   ],
   "users": {
@@ -298,6 +316,11 @@
     },
     "yis@company.com": {
       "id": 19,
+      "role": "employee",
+      "password": "123456"
+    },
+    "sam@gmail.com": {
+      "id": 20,
       "role": "employee",
       "password": "123456"
     }
