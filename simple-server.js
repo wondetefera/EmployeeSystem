@@ -9,6 +9,13 @@ const cron = require('node-cron');
 // Load environment variables
 require('dotenv').config();
 
+// Initialize database connection
+const { initializeDatabase } = require('./db/connection');
+const dbOps = require('./db/operations');
+
+// Database mode flag - set to true to use MySQL instead of data.json
+const USE_DATABASE = process.env.USE_DATABASE === 'true' || process.env.NODE_ENV === 'production';
+
 // Load configuration
 let config = {};
 try {
@@ -3381,32 +3388,53 @@ This report was generated automatically by the Employee Management System.
 const serverHost = SERVER_CONFIG.host === '0.0.0.0' ? '0.0.0.0' : 
                    (SERVER_CONFIG.allowExternalConnections ? '0.0.0.0' : SERVER_CONFIG.host);
 
-server.listen(SERVER_CONFIG.port, serverHost, () => {
-    const isCloudPlatform = !!process.env.PORT;
-    
-    console.log(`🚀 Employee Management System running on http://${serverHost}:${SERVER_CONFIG.port}`);
-    
-    if (isCloudPlatform) {
-        console.log('☁️  Running in CLOUD/PRODUCTION mode');
-        console.log(`✅ Server bound to ${serverHost}:${SERVER_CONFIG.port}`);
-    } else {
-        console.log(`🏠 Application: http://${SERVER_CONFIG.host}:${SERVER_CONFIG.port}`);
-        console.log('');
-        console.log('Server Configuration:');
-        console.log(`- Host: ${SERVER_CONFIG.host}`);
-        console.log(`- Port: ${SERVER_CONFIG.port}`);
-        console.log(`- External Access: ${SERVER_CONFIG.allowExternalConnections ? 'Enabled' : 'Disabled'}`);
-        console.log(`- Binding to: ${serverHost}`);
-        console.log('');
-        console.log('Network Access URLs:');
-        console.log(`- Local: http://localhost:${SERVER_CONFIG.port}`);
-        console.log(`- Network: http://10.192.230.251:${SERVER_CONFIG.port}`);
-        console.log('');
-        console.log('Default Login Credentials:');
-        console.log('- Admin: admin@company.com / admin123');
-        console.log('- Manager: manager@company.com / manager123');
-        console.log('- Employee: employee@company.com / employee123');
+// Initialize database before starting server
+async function startServer() {
+    if (USE_DATABASE) {
+        console.log('🔌 Initializing database connection...');
+        const dbConnected = await initializeDatabase();
+        if (dbConnected) {
+            console.log('✅ Database initialized successfully');
+        } else {
+            console.warn('⚠️  Database initialization failed, some features may not work');
+        }
     }
+    
+    server.listen(SERVER_CONFIG.port, serverHost, () => {
+        const isCloudPlatform = !!process.env.PORT;
+        
+        console.log(`🚀 Employee Management System running on http://${serverHost}:${SERVER_CONFIG.port}`);
+        console.log(`📊 Data Mode: ${USE_DATABASE ? 'MySQL Database' : 'File-based (data.json)'}`);
+        
+        if (isCloudPlatform) {
+            console.log('☁️  Running in CLOUD/PRODUCTION mode');
+            console.log(`✅ Server bound to ${serverHost}:${SERVER_CONFIG.port}`);
+        } else {
+            console.log(`🏠 Application: http://${SERVER_CONFIG.host}:${SERVER_CONFIG.port}`);
+            console.log('');
+            console.log('Server Configuration:');
+            console.log(`- Host: ${SERVER_CONFIG.host}`);
+            console.log(`- Port: ${SERVER_CONFIG.port}`);
+            console.log(`- External Access: ${SERVER_CONFIG.allowExternalConnections ? 'Enabled' : 'Disabled'}`);
+            console.log(`- Binding to: ${serverHost}`);
+            console.log(`- Database Mode: ${USE_DATABASE ? 'Enabled' : 'Disabled'}`);
+            console.log('');
+            console.log('Network Access URLs:');
+            console.log(`- Local: http://localhost:${SERVER_CONFIG.port}`);
+            console.log(`- Network: http://10.192.230.251:${SERVER_CONFIG.port}`);
+            console.log('');
+            console.log('Default Login Credentials:');
+            console.log('- Admin: admin@company.com / admin123');
+            console.log('- Manager: manager@company.com / manager123');
+            console.log('- Employee: employee@company.com / employee123');
+        }
+    });
+}
+
+// Start the server
+startServer().catch(err => {
+    console.error('Failed to start server:', err);
+    process.exit(1);
 });
 
 module.exports = server;
