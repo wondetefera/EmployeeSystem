@@ -17,9 +17,17 @@ initializeDataFile();
 const { initializeDatabase } = require('./db/connection');
 const dbOps = require('./db/operations');
 
+// Log database configuration
+console.log('📦 Database Configuration:');
+console.log(`   DB_HOST: ${process.env.DB_HOST || 'not set'}`);
+console.log(`   DB_PORT: ${process.env.DB_PORT || 'not set'}`);
+console.log(`   DB_NAME: ${process.env.DB_NAME || 'not set'}`);
+console.log(`   DB_USER: ${process.env.DB_USER || 'not set'}`);
+console.log(`   DB_SSL: ${process.env.DB_SSL || 'not set'}`);
+
 // Database mode flag - set to true to use MySQL instead of data.json
-// FORCED TO FALSE until database connectivity is fixed
-const USE_DATABASE = false; // Temporarily disabled - database connection failing with ENOTFOUND
+// Re-enabling database connection with Aiven MySQL on Render
+const USE_DATABASE = true; // Using Aiven MySQL for persistent storage
 
 // Helper function to load data from data.json
 function loadDataFromFile() {
