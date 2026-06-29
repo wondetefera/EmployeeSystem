@@ -693,39 +693,69 @@
         });
 
         function updateUI() {
-            // Update user info
-            document.getElementById('user-email').textContent = currentUser.email;
-            document.getElementById('user-role').textContent = currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1);
-            
-            // Update date
-            document.getElementById('current-date').textContent = new Date().toLocaleDateString();
-            
-            // Show/hide menu items based on role
-            if (currentUser.role === 'admin') {
-                // Admin: Full access to all features
-                document.querySelectorAll('[id^="admin-menu"]').forEach(el => el.style.display = 'block');
-                document.querySelectorAll('[id^="manager-menu"]').forEach(el => el.style.display = 'block');
-                document.getElementById('admin-config-status').style.display = 'block'; // Configuration status card
-                document.getElementById('admin-backup-card').style.display = 'block'; // Backup card
-                document.getElementById('notifications-dropdown').style.display = 'block';
-                updateAdminStats();
-                loadNotifications(); // Load notifications for admin
-                updateConfigurationStatus(); // Load configuration status
-                showPayrollSection(); // Show payroll system for admin
-            } else if (currentUser.role === 'manager') {
-                document.getElementById('notifications-dropdown').style.display = 'block';
-                loadNotifications(); // Load notifications for manager
-                // Manager: Access to employees and departments, but not add employee
-                document.getElementById('admin-menu').style.display = 'block'; // Employees
-                document.getElementById('admin-menu-2').style.display = 'block'; // Departments
-                document.getElementById('admin-menu-3').style.display = 'block'; // ID Badges
-                // admin-menu-4 (Add Employee) stays hidden for managers
-                document.querySelectorAll('[id^="manager-menu"]').forEach(el => el.style.display = 'block');
-                showPayrollSection(); // Show payroll system for manager
-                updateEmployeeStats();
-            } else {
-                // Employee: Only basic access - no employees or departments management
-                updateEmployeeStats();
+            try {
+                // Update user info
+                const userEmailEl = document.getElementById('user-email');
+                const userRoleEl = document.getElementById('user-role');
+                const currentDateEl = document.getElementById('current-date');
+                
+                if (!userEmailEl || !userRoleEl || !currentDateEl) {
+                    console.warn('⚠️  Some dashboard UI elements not found. Waiting for page to fully load...');
+                    return; // Skip UI update if elements don't exist yet
+                }
+                
+                userEmailEl.textContent = currentUser.email;
+                userRoleEl.textContent = currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1);
+                currentDateEl.textContent = new Date().toLocaleDateString();
+                
+                // Show/hide menu items based on role
+                if (currentUser.role === 'admin') {
+                    // Admin: Full access to all features
+                    document.querySelectorAll('[id^="admin-menu"]').forEach(el => {
+                        if (el && el.style) el.style.display = 'block';
+                    });
+                    document.querySelectorAll('[id^="manager-menu"]').forEach(el => {
+                        if (el && el.style) el.style.display = 'block';
+                    });
+                    
+                    const adminConfigEl = document.getElementById('admin-config-status');
+                    const adminBackupEl = document.getElementById('admin-backup-card');
+                    const notificationsEl = document.getElementById('notifications-dropdown');
+                    
+                    if (adminConfigEl && adminConfigEl.style) adminConfigEl.style.display = 'block';
+                    if (adminBackupEl && adminBackupEl.style) adminBackupEl.style.display = 'block';
+                    if (notificationsEl && notificationsEl.style) notificationsEl.style.display = 'block';
+                    
+                    updateAdminStats();
+                    loadNotifications(); // Load notifications for admin
+                    updateConfigurationStatus(); // Load configuration status
+                    showPayrollSection(); // Show payroll system for admin
+                } else if (currentUser.role === 'manager') {
+                    const notificationsEl = document.getElementById('notifications-dropdown');
+                    if (notificationsEl && notificationsEl.style) notificationsEl.style.display = 'block';
+                    
+                    loadNotifications(); // Load notifications for manager
+                    // Manager: Access to employees and departments, but not add employee
+                    const adminMenuEl = document.getElementById('admin-menu');
+                    const adminMenu2El = document.getElementById('admin-menu-2');
+                    const adminMenu3El = document.getElementById('admin-menu-3');
+                    
+                    if (adminMenuEl && adminMenuEl.style) adminMenuEl.style.display = 'block'; // Employees
+                    if (adminMenu2El && adminMenu2El.style) adminMenu2El.style.display = 'block'; // Departments
+                    if (adminMenu3El && adminMenu3El.style) adminMenu3El.style.display = 'block'; // ID Badges
+                    
+                    document.querySelectorAll('[id^="manager-menu"]').forEach(el => {
+                        if (el && el.style) el.style.display = 'block';
+                    });
+                    showPayrollSection(); // Show payroll system for manager
+                    updateEmployeeStats();
+                } else {
+                    // Employee: Only basic access - no employees or departments management
+                    updateEmployeeStats();
+                }
+            } catch (error) {
+                console.error('⚠️  Error in updateUI (non-fatal):', error);
+                // Don't throw - allow the page to continue loading
             }
         }
 
