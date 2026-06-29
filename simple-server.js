@@ -31,8 +31,8 @@ initializeDatabase();
 console.log('✅ Database initialization call sent');
 
 // Database mode flag - set to true to use MySQL instead of data.json
-// Re-enabling database connection with Aiven MySQL on Render
-const USE_DATABASE = true; // Using Aiven MySQL for persistent storage
+// Aiven connection not working on Render - reverting to file-based storage for now
+const USE_DATABASE = false; // Using file-based storage (data.json) - data NOT persistent on Render restarts
 
 // Helper function to load data from data.json
 function loadDataFromFile() {
