@@ -184,20 +184,47 @@ function generateSessionId() {
 
 function getSession(req) {
     const cookies = req.headers.cookie;
-    if (!cookies) return null;
+    if (!cookies) {
+        console.log('🔍 No cookies in request');
+        return null;
+    }
     
     const sessionCookie = cookies.split(';').find(c => c.trim().startsWith('sessionId='));
-    if (!sessionCookie) return null;
+    if (!sessionCookie) {
+        console.log('🔍 No sessionId cookie found in:', cookies);
+        return null;
+    }
     
     const sessionId = sessionCookie.split('=')[1];
-    return sessions.get(sessionId);
+    const session = sessions.get(sessionId);
+    console.log(`🔍 Session lookup for ${sessionId}: ${session ? 'FOUND' : 'NOT FOUND'}`);
+    return session;
 }
 
 function setSession(res, sessionData) {
     const sessionId = generateSessionId();
     sessions.set(sessionId, sessionData);
     saveSessions(); // Persist sessions to file
-    res.setHeader('Set-Cookie', `sessionId=${sessionId}; HttpOnly; Path=/`);
+    
+    // Production-ready cookie attributes for Render deployment
+    // Max-Age: 24 hours (86400 seconds) - prevents immediate expiry
+    // SameSite=Lax: Allows cookie to be sent on same-site requests and top-level navigation
+    // Secure: Only send cookie over HTTPS (Render uses HTTPS)
+    const isProduction = process.env.PORT !== undefined; // Render sets PORT env var
+    const cookieAttributes = [
+        `sessionId=${sessionId}`,
+        'HttpOnly', // Prevents JavaScript access (XSS protection)
+        'Path=/',
+        'Max-Age=86400', // 24 hours
+        'SameSite=Lax' // CSRF protection while allowing normal navigation
+    ];
+    
+    // Add Secure flag for production (HTTPS)
+    if (isProduction) {
+        cookieAttributes.push('Secure');
+    }
+    
+    res.setHeader('Set-Cookie', cookieAttributes.join('; '));
     return sessionId;
 }
 
