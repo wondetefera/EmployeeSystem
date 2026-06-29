@@ -277,9 +277,9 @@ const server = http.createServer((req, res) => {
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
     
-    // Permissive CSP to allow all scripts - fixes eval() blocking issues
-    // This is necessary for third-party libraries that use eval()
-    res.setHeader('Content-Security-Policy', "default-src *; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'");
+    // Completely permissive CSP - allow all resources from all sources
+    // This fixes CSP blocking issues with images, scripts, styles, etc.
+    res.setHeader('Content-Security-Policy', "default-src *; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; img-src * data:; font-src * data:");
     
     if (req.method === 'OPTIONS') {
         res.writeHead(200);
