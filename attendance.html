@@ -101,7 +101,7 @@
                 </div>
 
                 <!-- Admin Notification Banner -->
-                <div class="alert alert-primary alert-dismissible fade show" id="admin-notification" style="display: none; background: linear-gradient(135deg, #007bff 0%, #0056b3 100%); border: 2px solid #0056b3; color: white;" role="alert">
+                <div class="alert alert-danger alert-dismissible fade show" id="admin-notification" style="display: none; background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); border: 2px solid #c82333; color: white;" role="alert">
                     <h5><i class="fas fa-user-shield me-2"></i>Administrator Access Detected</h5>
                     <p class="mb-2">You have admin privileges! You can now:</p>
                     <ul class="mb-2">
@@ -168,7 +168,8 @@
                                 <h5 class="mb-0"><i class="fas fa-clock me-2"></i>Quick Actions</h5>
                             </div>
                             <div class="card-body">
-                                <div class="row g-3">
+                                <!-- Check-in/Check-out Buttons at Top -->
+                                <div class="row g-3 mb-3">
                                     <div class="col-12 col-sm-6 col-md-3">
                                         <button class="btn btn-success w-100" onclick="checkIn('morning')">
                                             <i class="fas fa-sign-in-alt me-2"></i>Morning Check-in
@@ -191,8 +192,8 @@
                                     </div>
                                 </div>
                                 
-                                <!-- Flexible Workflow Information -->
-                                <div class="mt-3 p-2 bg-primary text-white rounded">
+                                <!-- Flexible Workflow Information with Red Background -->
+                                <div class="mt-3 p-3 rounded" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white;">
                                     <h6><i class="fas fa-info-circle me-2"></i>Flexible Attendance</h6>
                                     <small>
                                         • You can start with either Morning or Afternoon session<br>
