@@ -660,13 +660,21 @@
             setInterval(updateClock, 1000);
             
             try {
+                console.log('🔐 Checking authentication...');
                 const response = await fetchApi('/api/user');
+                console.log('🔐 Auth response status:', response.status, 'ok:', response.ok);
+                
                 if (response.ok) {
                     currentUser = await response.json();
+                    console.log('✅ User authenticated:', currentUser.email, 'role:', currentUser.role);
                     updateUI();
                     
-                    // Load recent activity
-                    await loadRecentActivity();
+                    // Load recent activity - wrap in try-catch to prevent errors from logging out user
+                    try {
+                        await loadRecentActivity();
+                    } catch (activityError) {
+                        console.error('⚠️  Error loading recent activity (non-fatal):', activityError);
+                    }
                     
                     // Set up periodic notification checking for admins and managers
                     if (currentUser.role === 'admin' || currentUser.role === 'manager') {
@@ -674,10 +682,12 @@
                         setInterval(loadNotifications, 30000);
                     }
                 } else {
+                    console.error('❌ Auth failed - response not ok, redirecting to login');
                     window.location.href = window.configManager.getServerUrl() + '/login';
                 }
             } catch (error) {
-                console.error('Error loading user data:', error);
+                console.error('❌ Error loading user data:', error);
+                console.error('❌ Error stack:', error.stack);
                 window.location.href = window.configManager.getServerUrl() + '/login';
             }
         });
