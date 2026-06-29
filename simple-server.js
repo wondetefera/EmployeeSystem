@@ -9,6 +9,10 @@ const cron = require('node-cron');
 // Load environment variables
 require('dotenv').config();
 
+// Initialize data.json if it doesn't exist (for Render deployment)
+const { initializeDataFile } = require('./init-data');
+initializeDataFile();
+
 // Initialize database connection
 const { initializeDatabase } = require('./db/connection');
 const dbOps = require('./db/operations');
