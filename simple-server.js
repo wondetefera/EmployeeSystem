@@ -121,8 +121,35 @@ const mimeTypes = {
     '.svg': 'image/svg+xml'
 };
 
-// Simple session storage (in production, use proper session management)
-const sessions = new Map();
+// Session storage - load from file or memory
+let sessions = new Map();
+
+// Load sessions from file on startup
+function loadSessions() {
+    try {
+        const fileData = loadDataFromFile();
+        if (fileData.sessions && Array.isArray(fileData.sessions)) {
+            sessions = new Map(fileData.sessions);
+            console.log(`✅ Loaded ${sessions.size} sessions from file`);
+        }
+    } catch (error) {
+        console.log('⚠️  No existing sessions to load');
+    }
+}
+
+// Save sessions to file
+function saveSessions() {
+    try {
+        const fileData = loadDataFromFile();
+        fileData.sessions = Array.from(sessions.entries());
+        saveDataToFile(fileData);
+    } catch (error) {
+        console.error('❌ Error saving sessions:', error);
+    }
+}
+
+// Initialize sessions on startup
+loadSessions();
 
 // Compression helper
 function shouldCompress(req, contentType) {
@@ -169,6 +196,7 @@ function getSession(req) {
 function setSession(res, sessionData) {
     const sessionId = generateSessionId();
     sessions.set(sessionId, sessionData);
+    saveSessions(); // Persist sessions to file
     res.setHeader('Set-Cookie', `sessionId=${sessionId}; HttpOnly; Path=/`);
     return sessionId;
 }

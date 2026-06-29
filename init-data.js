@@ -75,7 +75,8 @@ const defaultData = {
   ],
   "leaveRequests": [],
   "attendance": [],
-  "notifications": []
+  "notifications": [],
+  "sessions": []
 };
 
 function initializeDataFile() {
