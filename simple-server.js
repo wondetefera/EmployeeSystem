@@ -131,9 +131,16 @@ function loadSessions() {
         if (fileData.sessions && Array.isArray(fileData.sessions)) {
             sessions = new Map(fileData.sessions);
             console.log(`✅ Loaded ${sessions.size} sessions from file`);
+            // Log session IDs for debugging (first 8 chars only)
+            if (sessions.size > 0) {
+                const sessionIds = Array.from(sessions.keys()).map(id => id.substring(0, 8));
+                console.log(`   Session IDs: ${sessionIds.join(', ')}...`);
+            }
+        } else {
+            console.log('⚠️  No sessions array found in data.json');
         }
     } catch (error) {
-        console.log('⚠️  No existing sessions to load');
+        console.log('⚠️  No existing sessions to load:', error.message);
     }
 }
 
@@ -143,6 +150,7 @@ function saveSessions() {
         const fileData = loadDataFromFile();
         fileData.sessions = Array.from(sessions.entries());
         saveDataToFile(fileData);
+        console.log(`💾 Saved ${sessions.size} sessions to file`);
     } catch (error) {
         console.error('❌ Error saving sessions:', error);
     }
@@ -208,23 +216,29 @@ function setSession(res, sessionData) {
     
     // Production-ready cookie attributes for Render deployment
     // Max-Age: 24 hours (86400 seconds) - prevents immediate expiry
-    // SameSite=Lax: Allows cookie to be sent on same-site requests and top-level navigation
-    // Secure: Only send cookie over HTTPS (Render uses HTTPS)
+    // SameSite=None + Secure: Required for cross-origin requests on some cloud platforms
+    // SameSite=Lax: Better for same-origin (more secure but works for most cases)
     const isProduction = process.env.PORT !== undefined; // Render sets PORT env var
     const cookieAttributes = [
         `sessionId=${sessionId}`,
         'HttpOnly', // Prevents JavaScript access (XSS protection)
         'Path=/',
-        'Max-Age=86400', // 24 hours
-        'SameSite=Lax' // CSRF protection while allowing normal navigation
+        'Max-Age=86400' // 24 hours
     ];
     
-    // Add Secure flag for production (HTTPS)
+    // For production (HTTPS), use Secure + SameSite=None for maximum compatibility
+    // This ensures cookies work with redirects and fetch requests
     if (isProduction) {
         cookieAttributes.push('Secure');
+        cookieAttributes.push('SameSite=None');
+    } else {
+        // Local development - no Secure, use Lax
+        cookieAttributes.push('SameSite=Lax');
     }
     
-    res.setHeader('Set-Cookie', cookieAttributes.join('; '));
+    const cookieString = cookieAttributes.join('; ');
+    console.log(`🍪 Setting cookie: ${cookieString.substring(0, 50)}...`);
+    res.setHeader('Set-Cookie', cookieString);
     return sessionId;
 }
 
