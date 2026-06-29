@@ -18,8 +18,8 @@ const { initializeDatabase } = require('./db/connection');
 const dbOps = require('./db/operations');
 
 // Database mode flag - set to true to use MySQL instead of data.json
-// TEMPORARY: Force file-based storage until database connection is fixed
-const USE_DATABASE = process.env.USE_DATABASE === 'true' && process.env.FORCE_DATABASE === 'true';
+// FORCED TO FALSE until database connectivity is fixed
+const USE_DATABASE = false; // Temporarily disabled - database connection failing with ENOTFOUND
 
 // Load configuration
 let config = {};
