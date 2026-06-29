@@ -1868,9 +1868,14 @@ async function handleGetEmployees(req, res) {
 
     try {
         // Get employees from database or file-based storage
-        let employeeData = USE_DATABASE 
-            ? await dbOps.getAllEmployees()
-            : employees;
+        let employeeData;
+        
+        if (USE_DATABASE) {
+            employeeData = await dbOps.getAllEmployees();
+        } else {
+            const fileData = loadDataFromFile();
+            employeeData = fileData.employees || [];
+        }
 
         // Strict role-based filtering
         if (session.role === 'employee') {
@@ -1895,7 +1900,7 @@ async function handleGetEmployees(req, res) {
         res.writeHead(200);
         res.end(JSON.stringify({ success: true, data: enrichedData, userRole: session.role }));
     } catch (error) {
-        console.error('❌ Database error in handleGetEmployees:', error);
+        console.error('❌ Error in handleGetEmployees:', error);
         res.writeHead(500);
         res.end(JSON.stringify({ error: 'Failed to fetch employees' }));
     }
@@ -2809,9 +2814,15 @@ async function handleDeleteEmployee(req, res, pathname) {
 
     try {
         const employeeId = parseInt(pathname.split('/').pop());
+        let allEmployees, fileData = null;
         
-        // Get employee from database
-        const allEmployees = await dbOps.getAllEmployees();
+        if (USE_DATABASE) {
+            allEmployees = await dbOps.getAllEmployees();
+        } else {
+            fileData = loadDataFromFile();
+            allEmployees = fileData.employees || [];
+        }
+        
         const employeeIndex = allEmployees.findIndex(emp => emp.id === employeeId);
 
         if (employeeIndex === -1) {
@@ -2835,43 +2846,39 @@ async function handleDeleteEmployee(req, res, pathname) {
         const deletedEmployee = { ...targetEmployee };
 
         if (USE_DATABASE) {
-            // Use soft delete in database (sets status='inactive')
+            // Use database delete
             await dbOps.deleteEmployee(employeeId);
         } else {
             // Remove employee from employees array
-            employees.splice(employeeIndex, 1);
+            fileData.employees.splice(employeeIndex, 1);
 
             // Remove user account
-            if (users[targetEmployee.email]) {
-                delete users[targetEmployee.email];
+            if (fileData.users && fileData.users[targetEmployee.email]) {
+                delete fileData.users[targetEmployee.email];
             }
 
             // Remove related attendance records
-            for (let i = attendanceRecords.length - 1; i >= 0; i--) {
-                if (attendanceRecords[i].employee_id === employeeId) {
-                    attendanceRecords.splice(i, 1);
-                }
+            if (fileData.attendance) {
+                fileData.attendance = fileData.attendance.filter(rec => rec.employee_id !== employeeId);
             }
 
             // Remove related leave requests
-            for (let i = leaveRequests.length - 1; i >= 0; i--) {
-                if (leaveRequests[i].employee_id === employeeId) {
-                    leaveRequests.splice(i, 1);
-                }
+            if (fileData.leaveRequests) {
+                fileData.leaveRequests = fileData.leaveRequests.filter(req => req.employee_id !== employeeId);
             }
 
             // Save data to file
-            saveData();
+            saveDataToFile(fileData);
         }
 
-        console.log(`Employee deleted by ${session.email}: ${buildEmployeeName(deletedEmployee)} (${deletedEmployee.email})`);
+        console.log(`✅ Employee deleted by ${session.email}: ${deletedEmployee.first_name} ${deletedEmployee.last_name} (${deletedEmployee.email})`);
 
         res.writeHead(200);
         res.end(JSON.stringify({ 
             success: true, 
-            message: `Employee ${buildEmployeeName(deletedEmployee)} has been removed successfully`,
+            message: `Employee ${deletedEmployee.first_name} ${deletedEmployee.last_name} has been removed successfully`,
             deletedEmployee: {
-                name: buildEmployeeName(deletedEmployee),
+                name: `${deletedEmployee.first_name} ${deletedEmployee.last_name}`,
                 email: deletedEmployee.email,
                 employee_id: deletedEmployee.employee_id
             }
