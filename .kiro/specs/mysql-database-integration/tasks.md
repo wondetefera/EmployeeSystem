@@ -220,27 +220,27 @@ This implementation plan guides the migration from ephemeral file-based storage 
 - [x] 12. Checkpoint - Verify all data access modules
   - Ensure all CRUD operations work correctly. Run integration tests if created. Ask the user if questions arise.
 
-- [ ] 13. Update server routes to use database
+- [-] 13. Update server routes to use database
   - [x] 13.1 Replace handleGetEmployees with database query
     - Replace fs.readFileSync in handleGetEmployees with call to getEmployees()
     - Ensure JSON response format matches previous file-based format
     - Add error handling for database failures (return 500 status)
     - _Requirements: 4.1, 4.3, 8.1, 8.2, 8.3_
   
-  - [ ] 13.2 Replace handleAddEmployee with database operation
+  - [~] 13.2 Replace handleAddEmployee with database operation
     - Replace fs.readFileSync + fs.writeFileSync with call to addEmployee()
     - Use transaction for employee and user creation
     - Handle constraint violations (return 409 for duplicate email/employee_id)
     - Handle foreign key violations (return 400 with descriptive message)
     - _Requirements: 4.2, 4.4, 5.1, 6.5, 6.6, 6.7_
   
-  - [ ] 13.3 Replace handleUpdateEmployee with database operation
+  - [~] 13.3 Replace handleUpdateEmployee with database operation
     - Replace file operations with call to updateEmployee()
     - Use parameterized UPDATE query
     - Add error handling for database failures
     - _Requirements: 4.2, 4.5, 4.14_
   
-  - [ ] 13.4 Replace handleDeleteEmployee with database operation
+  - [~] 13.4 Replace handleDeleteEmployee with database operation
     - Replace file operations with call to deleteEmployee()
     - Use soft delete (status='inactive')
     - Use transaction to deactivate user record
@@ -252,7 +252,7 @@ This implementation plan guides the migration from ephemeral file-based storage 
     - Maintain existing session-based authentication
     - _Requirements: 4.1, 4.7, 4.12, 4.13, 8.8_
   
-  - [ ] 13.6 Replace handleAttendance with database operations
+  - [~] 13.6 Replace handleAttendance with database operations
     - Replace file operations with calls to recordAttendance()
     - Use UPSERT pattern for same-day updates
     - Add error handling for constraint violations
@@ -263,7 +263,7 @@ This implementation plan guides the migration from ephemeral file-based storage 
     - Ensure JOIN with employees table works correctly
     - _Requirements: 4.1, 4.9_
   
-  - [ ] 13.8 Replace handleUpdateLeaveRequest with database operation
+  - [~] 13.8 Replace handleUpdateLeaveRequest with database operation
     - Replace file operations with call to updateLeaveRequestStatus()
     - Use transaction for leave update and notification creation
     - _Requirements: 4.2, 4.10, 5.3_
@@ -273,27 +273,27 @@ This implementation plan guides the migration from ephemeral file-based storage 
     - Ensure ORDER BY created_at DESC is applied
     - _Requirements: 4.1, 4.11_
   
-  - [ ] 13.10 Replace all remaining data.json file operations
+  - [x] 13.10 Replace all remaining data.json file operations
     - Search for any remaining fs.readFileSync or fs.writeFileSync calls related to data.json
     - Replace with appropriate database operations
     - Remove data.json file read/write helper functions
     - _Requirements: 4.1, 4.2_
 
-- [ ] 14. Implement comprehensive error handling
+- [-] 14. Implement comprehensive error handling
   - [x] 14.1 Add connection error handling
     - Implement connection failure logging with timestamp and details
     - Implement retry logic with exponential backoff
     - Add environment-specific behavior (production exit, development continue)
     - _Requirements: 1.3, 6.1, 9.7, 9.8_
   
-  - [ ] 14.2 Add query error handling
+  - [~] 14.2 Add query error handling
     - Distinguish between connection, syntax, constraint violation, and timeout errors
     - Return appropriate HTTP status codes (400, 409, 500)
     - Log errors without exposing internal database details to clients
     - Implement query timeout handling (30 seconds)
     - _Requirements: 4.14, 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8_
   
-  - [ ] 14.3 Add connection pool monitoring
+  - [~] 14.3 Add connection pool monitoring
     - Implement periodic logging of connection pool statistics
     - Warn when pool usage exceeds 75% (15/20 connections)
     - Handle pool exhaustion with request queuing
@@ -307,18 +307,18 @@ This implementation plan guides the migration from ephemeral file-based storage 
     - Test query timeout handling
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6_
 
-- [ ] 15. Checkpoint - Verify error handling
+- [~] 15. Checkpoint - Verify error handling
   - Test various error scenarios (invalid data, duplicate records, connection failures). Ensure appropriate error responses. Ask the user if questions arise.
 
 - [ ] 16. Performance optimization
-  - [ ] 16.1 Implement query optimization
+  - [~] 16.1 Implement query optimization
     - Use prepared statements for frequently executed queries
     - Replace SELECT * with explicit column names where only specific fields needed
     - Cache database schema metadata in memory
     - Configure connection pool idle timeout (10 minutes)
     - _Requirements: 7.1, 7.2, 7.3, 7.5, 7.7, 7.8_
   
-  - [ ] 16.2 Verify query performance
+  - [~] 16.2 Verify query performance
     - Test getEmployees completes in <100ms for 1000 employees
     - Test addEmployee completes in <200ms
     - Test attendance queries with date range complete in <50ms
@@ -333,7 +333,7 @@ This implementation plan guides the migration from ephemeral file-based storage 
     - _Requirements: 7.2, 7.8_
 
 - [ ] 17. Create deployment documentation
-  - [ ] 17.1 Create database setup documentation
+  - [~] 17.1 Create database setup documentation
     - Create database-setup.md with MySQL installation instructions
     - Document CREATE DATABASE statement for employee_system
     - Document MySQL user creation with appropriate permissions
@@ -345,7 +345,7 @@ This implementation plan guides the migration from ephemeral file-based storage 
     - Include verification queries for successful migration
     - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 10.7, 10.8, 10.9_
   
-  - [ ] 17.2 Update main deployment documentation
+  - [~] 17.2 Update main deployment documentation
     - Update DEPLOYMENT_GUIDE.md with database setup steps
     - Update .env.example with all database variables
     - Document environment-specific configurations
@@ -353,14 +353,14 @@ This implementation plan guides the migration from ephemeral file-based storage 
     - _Requirements: 9.4, 9.5, 9.6, 10.1, 10.7_
 
 - [ ] 18. Integration and final verification
-  - [ ] 18.1 Update server startup to initialize database
+  - [~] 18.1 Update server startup to initialize database
     - Call initializeDatabase() on server startup before accepting requests
     - Call createTables() to ensure schema exists
     - Add database connection validation
     - Log connection status and configuration details (excluding password)
     - _Requirements: 1.6, 9.6_
   
-  - [ ] 18.2 Perform backward compatibility verification
+  - [~] 18.2 Perform backward compatibility verification
     - Test all API endpoints return same JSON structure as before
     - Verify date formats are ISO 8601 strings
     - Verify number values are numbers not strings
@@ -375,14 +375,14 @@ This implementation plan guides the migration from ephemeral file-based storage 
     - Test transaction integrity for multi-step operations
     - _Requirements: 8.1, 8.2, 8.3, 8.8_
   
-  - [ ] 18.4 Run migration script on actual data.json
+  - [~] 18.4 Run migration script on actual data.json
     - Create backup of production data.json
     - Run migrate-to-mysql.js against production database
     - Verify migration summary shows all records migrated
     - Run verification queries to confirm data integrity
     - _Requirements: 3.1, 3.14, 3.15_
 
-- [ ] 19. Final checkpoint - Production readiness
+- [~] 19. Final checkpoint - Production readiness
   - Ensure all tests pass, documentation is complete, and migration is successful. Verify the system works end-to-end with MySQL. Ask the user if ready for deployment.
 
 ## Notes

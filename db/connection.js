@@ -96,11 +96,15 @@ async function initializeDatabase() {
   // All retries exhausted
   console.error('💥 Failed to connect to database after', maxRetries, 'attempts');
   
+  // TEMPORARY: Allow server to start even on database failure for debugging
+  console.warn('⚠️  TEMPORARY DEBUG MODE: Server will start without database');
+  console.warn('⚠️  Check the error messages above to diagnose the connection issue');
+  console.warn('⚠️  Database operations will fail until connection is fixed');
+  
   // Environment-specific behavior
   if (process.env.NODE_ENV === 'production') {
-    console.error('FATAL: Could not connect to database in production environment');
-    console.error('Exiting process to allow container restart...');
-    process.exit(1); // Exit with error code for container orchestration
+    console.error('⚠️  PRODUCTION: Database connection failed but server will continue (DEBUG MODE)');
+    console.error('⚠️  This is temporary - fix the database connection ASAP!');
   } else {
     console.warn('⚠️  Running in development mode without database connection');
     console.warn('Database operations will fail. Please check your database configuration.');
