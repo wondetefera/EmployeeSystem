@@ -23,6 +23,20 @@ const defaultData = {
       "start_date": "2024-01-01",
       "status": "active",
       "annual_leave_days": 25
+    },
+    {
+      "id": 6,
+      "employee_id": "20240006",
+      "first_name": "WONDWOSEN",
+      "last_name": "TEFERA",
+      "email": "wondwossentefera@gmail.com",
+      "department": "Administration",
+      "job_title": "Senior",
+      "salary": 52040,
+      "start_date": "2025-10-16",
+      "phone": "0912654365",
+      "status": "active",
+      "annual_leave_days": 22
     }
   ],
   "users": {
@@ -30,6 +44,11 @@ const defaultData = {
       "id": 100,
       "role": "admin",
       "password": "admin123"
+    },
+    "wondwossentefera@gmail.com": {
+      "id": 6,
+      "role": "admin",
+      "password": "123456"
     }
   },
   "departments": [
