@@ -59,7 +59,18 @@ async function initializeDatabase() {
   });
   
   // Log connection attempt (excluding password)
-  console.log(`🔌 Attempting database connection to ${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || 3306}/${process.env.DB_NAME || 'employee_system'}`);
+  console.log('=====================================');
+  console.log('DATABASE CONNECTION CONFIGURATION:');
+  console.log('=====================================');
+  console.log(`Host: ${process.env.DB_HOST || 'localhost'}`);
+  console.log(`Port: ${process.env.DB_PORT || 3306}`);
+  console.log(`Database: ${process.env.DB_NAME || 'employee_system'}`);
+  console.log(`User: ${process.env.DB_USER || 'root'}`);
+  console.log(`SSL Enabled: ${process.env.DB_SSL === 'true' ? 'YES' : 'NO'}`);
+  console.log(`USE_DATABASE: ${process.env.USE_DATABASE}`);
+  console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
+  console.log('=====================================');
+  console.log(`🔌 Attempting connection...`);
   
   // Retry loop
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -69,7 +80,10 @@ async function initializeDatabase() {
       console.log('✅ Database connected successfully');
       return true;
     } catch (error) {
-      console.error(`❌ Database connection failed (attempt ${attempt}/${maxRetries}):`, error.message);
+      console.error(`❌ Database connection failed (attempt ${attempt}/${maxRetries}):`);
+      console.error(`   Error Code: ${error.code}`);
+      console.error(`   Error Message: ${error.message}`);
+      console.error(`   SQL State: ${error.sqlState || 'N/A'}`);
       
       // If not last attempt, wait before retrying
       if (attempt < maxRetries) {
