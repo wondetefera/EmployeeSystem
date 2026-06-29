@@ -277,9 +277,9 @@ const server = http.createServer((req, res) => {
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
     
-    // Content Security Policy - Allow unsafe-eval for compatibility with libraries that use eval()
-    // This is needed for some JavaScript libraries to work properly (e.g., Bootstrap tooltips, date pickers)
-    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data:; connect-src 'self'");
+    // Permissive CSP to allow all scripts - fixes eval() blocking issues
+    // This is necessary for third-party libraries that use eval()
+    res.setHeader('Content-Security-Policy', "default-src *; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'");
     
     if (req.method === 'OPTIONS') {
         res.writeHead(200);
