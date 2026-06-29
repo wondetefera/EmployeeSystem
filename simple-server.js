@@ -25,6 +25,11 @@ console.log(`   DB_NAME: ${process.env.DB_NAME || 'not set'}`);
 console.log(`   DB_USER: ${process.env.DB_USER || 'not set'}`);
 console.log(`   DB_SSL: ${process.env.DB_SSL || 'not set'}`);
 
+// Initialize the database connection pool
+console.log('🔄 Initializing database connection...');
+initializeDatabase();
+console.log('✅ Database initialization call sent');
+
 // Database mode flag - set to true to use MySQL instead of data.json
 // Re-enabling database connection with Aiven MySQL on Render
 const USE_DATABASE = true; // Using Aiven MySQL for persistent storage
