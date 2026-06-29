@@ -338,12 +338,26 @@
                 const result = await response.json();
 
                 if (result.success) {
-                    showAlert('success', `Employee ${firstName} ${lastName} has been removed successfully`);
+                    // Show detailed success message with deleted user info
+                    const successMessage = `
+                        ✅ Employee Deleted Successfully!
+                        
+                        Deleted User:
+                        • Name: ${result.deletedEmployee.name}
+                        • Email: ${result.deletedEmployee.email}
+                        • Employee ID: ${result.deletedEmployee.employee_id}
+                        
+                        All associated records have been removed.
+                    `;
+                    
+                    showAlert('success', `✅ Employee ${firstName} ${lastName} (${email}) has been completely removed from the system`);
+                    
+                    console.log('🗑️ Employee Deletion Details:', result.deletedEmployee);
                     
                     // Reload the employee list after successful deletion
                     setTimeout(() => {
                         loadEmployees();
-                    }, 2000);
+                    }, 1500);
                 } else {
                     showAlert('danger', result.error || 'Failed to remove employee');
                 }
