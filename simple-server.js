@@ -14,7 +14,8 @@ const { initializeDatabase } = require('./db/connection');
 const dbOps = require('./db/operations');
 
 // Database mode flag - set to true to use MySQL instead of data.json
-const USE_DATABASE = process.env.USE_DATABASE === 'true' || process.env.NODE_ENV === 'production';
+// TEMPORARY: Force file-based storage until database connection is fixed
+const USE_DATABASE = process.env.USE_DATABASE === 'true' && process.env.FORCE_DATABASE === 'true';
 
 // Load configuration
 let config = {};
