@@ -563,10 +563,9 @@ async function handleAttendance(req, res, data) {
         const currentDate = now.toISOString().split('T')[0];
         const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
         
-        // Get employee from database or file
-        const employee = USE_DATABASE
-            ? (await dbOps.getAllEmployees()).find(emp => emp.email === session.email)
-            : employees.find(emp => emp.email === session.email);
+        // Get employee from database
+        const allEmployees = await dbOps.getAllEmployees();
+        const employee = allEmployees.find(emp => emp.email === session.email);
             
         if (!employee) {
             res.writeHead(404);
@@ -586,14 +585,10 @@ async function handleAttendance(req, res, data) {
         }
         
         // Find or create today's attendance record
-        let todayRecord = USE_DATABASE
-            ? await dbOps.getTodayAttendance(employee.id, currentDate)
-            : attendanceRecords.find(record => 
-                record.employee_id === employee.id && record.date === currentDate
-            );
+        let todayRecord = await dbOps.getTodayAttendance(employee.id);
         
         if (!todayRecord) {
-            // Create new record
+            // Create new record (database will handle this in recordAttendance)
             todayRecord = {
                 employee_id: employee.id,
                 employee_name: buildEmployeeName(employee),
@@ -606,12 +601,6 @@ async function handleAttendance(req, res, data) {
                 status: 'present',
                 created_at: new Date().toISOString()
             };
-            
-            if (!USE_DATABASE) {
-                const maxId = attendanceRecords.length > 0 ? Math.max(...attendanceRecords.map(rec => rec.id)) : 0;
-                todayRecord.id = maxId + 1;
-                attendanceRecords.push(todayRecord);
-            }
         }
         
         // Update the appropriate field
@@ -668,14 +657,11 @@ async function handleAttendance(req, res, data) {
         // Calculate total hours if both morning and afternoon sessions are complete
         todayRecord.total_hours = calculateTotalHours(todayRecord);
         
-        // Save to database or file
-        if (USE_DATABASE) {
-            await dbOps.recordAttendance(employee.id, type, action, currentTime, currentDate);
-        } else {
-            saveData();
-        }
+        // Save to database
+        const employee_name = buildEmployeeName(employee);
+        await dbOps.recordAttendance(employee.id, employee_name, type, action, currentTime);
         
-        console.log(`${buildEmployeeName(employee)} - ${action} ${type} at ${currentTime}`);
+        console.log(`${employee_name} - ${action} ${type} at ${currentTime}`);
         
         res.writeHead(200);
         res.end(JSON.stringify({ 
@@ -776,7 +762,7 @@ async function handleTodayAttendance(req, res) {
     }
 }
 
-function handleUpdateAttendance(req, res, pathname, data) {
+async function handleUpdateAttendance(req, res, pathname, data) {
     const session = getSession(req);
     
     // Only admin can edit attendance times
@@ -788,55 +774,59 @@ function handleUpdateAttendance(req, res, pathname, data) {
         return;
     }
     
-    const attendanceId = parseInt(pathname.split('/').pop());
-    const recordIndex = attendanceRecords.findIndex(record => record.id === attendanceId);
-    
-    if (recordIndex === -1) {
-        res.writeHead(404);
-        res.end(JSON.stringify({ error: 'Attendance record not found' }));
-        return;
-    }
-    
-    const record = attendanceRecords[recordIndex];
-    
-    // Validate time format (HH:MM)
-    const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
-    const fieldsToUpdate = ['morning_checkin', 'morning_checkout', 'afternoon_checkin', 'afternoon_checkout'];
-    
-    for (const field of fieldsToUpdate) {
-        if (data[field] !== undefined) {
-            if (data[field] && !timeRegex.test(data[field])) {
-                res.writeHead(400);
-                res.end(JSON.stringify({ 
-                    error: `Invalid time format for ${field}. Use HH:MM format.` 
-                }));
-                return;
+    try {
+        const attendanceId = parseInt(pathname.split('/').pop());
+        
+        // Validate time format (HH:MM)
+        const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
+        const fieldsToUpdate = ['morning_checkin', 'morning_checkout', 'afternoon_checkin', 'afternoon_checkout'];
+        
+        const updates = {};
+        for (const field of fieldsToUpdate) {
+            if (data[field] !== undefined) {
+                if (data[field] && !timeRegex.test(data[field])) {
+                    res.writeHead(400);
+                    res.end(JSON.stringify({ 
+                        error: `Invalid time format for ${field}. Use HH:MM format.` 
+                    }));
+                    return;
+                }
+                updates[field] = data[field] || null;
             }
-            record[field] = data[field] || null;
         }
+        
+        // Add update metadata
+        updates.updated_by = session.email;
+        
+        // Update in database
+        const success = await dbOps.updateAttendance(attendanceId, updates);
+        
+        if (!success) {
+            res.writeHead(404);
+            res.end(JSON.stringify({ error: 'Attendance record not found' }));
+            return;
+        }
+        
+        // Fetch updated record
+        const allRecords = await dbOps.getAttendanceHistory({});
+        const record = allRecords.find(r => r.id === attendanceId);
+        
+        console.log(`Attendance updated by ${session.email} for ${record?.employee_name} on ${record?.date}`);
+        
+        res.writeHead(200);
+        res.end(JSON.stringify({ 
+            success: true, 
+            data: record,
+            message: 'Attendance times updated successfully'
+        }));
+    } catch (error) {
+        console.error('❌ Error updating attendance:', error);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to update attendance' }));
     }
-    
-    // Recalculate total hours
-    record.total_hours = calculateTotalHours(record);
-    
-    // Add update metadata
-    record.updated_at = new Date().toISOString();
-    record.updated_by = session.email;
-    
-    // Save data
-    saveData();
-    
-    console.log(`Attendance updated by ${session.email} for ${record.employee_name} on ${record.date}`);
-    
-    res.writeHead(200);
-    res.end(JSON.stringify({ 
-        success: true, 
-        data: record,
-        message: 'Attendance times updated successfully'
-    }));
 }
 
-function handleOvertimeRecord(req, res, data) {
+async function handleOvertimeRecord(req, res, data) {
     const session = getSession(req);
     
     // Only admin can record overtime
@@ -868,59 +858,63 @@ function handleOvertimeRecord(req, res, data) {
         return;
     }
     
-    // Find employee
-    const employee = employees.find(emp => emp.id == employee_id);
-    if (!employee) {
-        res.writeHead(404);
-        res.end(JSON.stringify({ error: 'Employee not found' }));
-        return;
-    }
-    
-    // Find or create attendance record for the date
-    let attendanceRecord = attendanceRecords.find(record => 
-        record.employee_id == employee_id && record.date === date
-    );
-    
-    if (!attendanceRecord) {
-        const maxId = attendanceRecords.length > 0 ? Math.max(...attendanceRecords.map(rec => rec.id)) : 0;
-        attendanceRecord = {
-            id: maxId + 1,
-            employee_id: employee.id,
-            employee_name: buildEmployeeName(employee),
-            date: date,
-            morning_checkin: null,
-            morning_checkout: null,
-            afternoon_checkin: null,
-            afternoon_checkout: null,
-            total_hours: 0,
-            status: 'present',
-            created_at: new Date().toISOString()
+    try {
+        // Find employee
+        const allEmployees = await dbOps.getAllEmployees();
+        const employee = allEmployees.find(emp => emp.id == employee_id);
+        
+        if (!employee) {
+            res.writeHead(404);
+            res.end(JSON.stringify({ error: 'Employee not found' }));
+            return;
+        }
+        
+        // Find or create attendance record for the date
+        const filters = { employee_id: employee_id, start_date: date, end_date: date, limit: 1 };
+        const records = await dbOps.getAttendanceHistory(filters);
+        let attendanceRecord = records.length > 0 ? records[0] : null;
+        
+        if (!attendanceRecord) {
+            // Create new attendance record for overtime
+            const employeeName = buildEmployeeName(employee);
+            await dbOps.recordAttendance(employee.id, employeeName, 'morning', 'checkin', null);
+            
+            // Get the newly created record
+            const newRecords = await dbOps.getAttendanceHistory(filters);
+            attendanceRecord = newRecords[0];
+        }
+        
+        // Add overtime information
+        const overtimeUpdates = {
+            overtime_hours: parseFloat(overtime_hours),
+            overtime_reason: overtime_reason || '',
+            overtime_recorded_by: session.email,
+            overtime_recorded_at: new Date().toISOString(),
+            updated_by: session.email
         };
-        attendanceRecords.push(attendanceRecord);
+        
+        await dbOps.updateAttendance(attendanceRecord.id, overtimeUpdates);
+        
+        // Fetch updated record
+        const updatedRecords = await dbOps.getAttendanceHistory(filters);
+        const updatedRecord = updatedRecords[0];
+        
+        console.log(`Overtime recorded by ${session.email}: ${overtime_hours} hours for ${buildEmployeeName(employee)} on ${date}`);
+        
+        res.writeHead(200);
+        res.end(JSON.stringify({ 
+            success: true, 
+            data: updatedRecord,
+            message: `Overtime of ${overtime_hours} hours recorded successfully for ${buildEmployeeName(employee)}`
+        }));
+    } catch (error) {
+        console.error('❌ Error recording overtime:', error);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to record overtime' }));
     }
-    
-    // Add overtime information
-    attendanceRecord.overtime_hours = parseFloat(overtime_hours);
-    attendanceRecord.overtime_reason = overtime_reason || '';
-    attendanceRecord.overtime_recorded_by = session.email;
-    attendanceRecord.overtime_recorded_at = new Date().toISOString();
-    attendanceRecord.updated_at = new Date().toISOString();
-    attendanceRecord.updated_by = session.email;
-    
-    // Save data
-    saveData();
-    
-    console.log(`Overtime recorded by ${session.email}: ${overtime_hours} hours for ${buildEmployeeName(employee)} on ${date}`);
-    
-    res.writeHead(200);
-    res.end(JSON.stringify({ 
-        success: true, 
-        data: attendanceRecord,
-        message: `Overtime of ${overtime_hours} hours recorded successfully for ${buildEmployeeName(employee)}`
-    }));
 }
 
-function handleCreateAttendance(req, res, data) {
+async function handleCreateAttendance(req, res, data) {
     const session = getSession(req);
     
     // Only admin can create attendance records
@@ -943,55 +937,70 @@ function handleCreateAttendance(req, res, data) {
         return;
     }
     
-    // Check if record already exists
-    const existingRecord = attendanceRecords.find(record => 
-        record.employee_id == employee_id && record.date === date
-    );
-    
-    if (existingRecord) {
-        res.writeHead(400);
+    try {
+        // Check if record already exists
+        const filters = { employee_id: employee_id, start_date: date, end_date: date, limit: 1 };
+        const existingRecords = await dbOps.getAttendanceHistory(filters);
+        
+        if (existingRecords.length > 0) {
+            res.writeHead(400);
+            res.end(JSON.stringify({ 
+                error: 'Attendance record already exists for this employee and date' 
+            }));
+            return;
+        }
+        
+        // Get employee to build name if not provided
+        let empName = employee_name;
+        if (!empName) {
+            const allEmployees = await dbOps.getAllEmployees();
+            const employee = allEmployees.find(emp => emp.id == employee_id);
+            if (employee) {
+                empName = buildEmployeeName(employee);
+            } else {
+                res.writeHead(404);
+                res.end(JSON.stringify({ error: 'Employee not found' }));
+                return;
+            }
+        }
+        
+        // Create base record by calling recordAttendance with morning checkin
+        await dbOps.recordAttendance(parseInt(employee_id), empName, 'morning', 'checkin', morning_checkin || null);
+        
+        // Now update with all the fields
+        const updatedRecords = await dbOps.getAttendanceHistory(filters);
+        const newRecord = updatedRecords[0];
+        
+        const updates = {
+            morning_checkout: morning_checkout || null,
+            afternoon_checkin: afternoon_checkin || null,
+            afternoon_checkout: afternoon_checkout || null,
+            status: status || 'present',
+            created_by: session.email
+        };
+        
+        await dbOps.updateAttendance(newRecord.id, updates);
+        
+        // Fetch the final record
+        const finalRecords = await dbOps.getAttendanceHistory(filters);
+        const finalRecord = finalRecords[0];
+        
+        console.log(`Attendance record created by ${session.email} for ${empName} on ${date}`);
+        
+        res.writeHead(200);
         res.end(JSON.stringify({ 
-            error: 'Attendance record already exists for this employee and date' 
+            success: true, 
+            data: finalRecord,
+            message: 'Attendance record created successfully'
         }));
-        return;
+    } catch (error) {
+        console.error('❌ Error creating attendance record:', error);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to create attendance record' }));
     }
-    
-    // Create new attendance record
-    const maxId = attendanceRecords.length > 0 ? Math.max(...attendanceRecords.map(rec => rec.id)) : 0;
-    const newRecord = {
-        id: maxId + 1,
-        employee_id: parseInt(employee_id),
-        employee_name: employee_name,
-        date: date,
-        morning_checkin: morning_checkin || null,
-        morning_checkout: morning_checkout || null,
-        afternoon_checkin: afternoon_checkin || null,
-        afternoon_checkout: afternoon_checkout || null,
-        total_hours: 0,
-        status: status || 'present',
-        created_at: new Date().toISOString(),
-        created_by: session.email
-    };
-    
-    // Calculate total hours
-    newRecord.total_hours = calculateTotalHours(newRecord);
-    
-    attendanceRecords.push(newRecord);
-    
-    // Save data
-    saveData();
-    
-    console.log(`Attendance record created by ${session.email} for ${employee_name} on ${date}`);
-    
-    res.writeHead(200);
-    res.end(JSON.stringify({ 
-        success: true, 
-        data: newRecord,
-        message: 'Attendance record created successfully'
-    }));
 }
 
-function handleAttendanceHistory(req, res) {
+async function handleAttendanceHistory(req, res) {
     const session = getSession(req);
     
     if (!session) {
@@ -1000,48 +1009,57 @@ function handleAttendanceHistory(req, res) {
         return;
     }
     
-    const parsedUrl = url.parse(req.url, true);
-    const { action, start_date, end_date, month, year } = parsedUrl.query;
-    
-    let filteredRecords = attendanceRecords;
-    
-    // Role-based filtering
-    if (session.role === 'employee') {
-        const employee = employees.find(emp => emp.email === session.email);
-        if (employee) {
-            filteredRecords = attendanceRecords.filter(record => record.employee_id === employee.id);
+    try {
+        const parsedUrl = url.parse(req.url, true);
+        const { action, start_date, end_date, month, year } = parsedUrl.query;
+        
+        let filters = {};
+        
+        // Role-based filtering
+        if (session.role === 'employee') {
+            const allEmployees = await dbOps.getAllEmployees();
+            const employee = allEmployees.find(emp => emp.email === session.email);
+            if (employee) {
+                filters.employee_id = employee.id;
+            }
         }
-    }
-    
-    // Date filtering
-    if (start_date && end_date) {
-        filteredRecords = filteredRecords.filter(record => 
-            record.date >= start_date && record.date <= end_date
-        );
-    }
-    
-    // Handle different actions
-    if (action === 'stats' && month && year) {
-        // Calculate monthly statistics
-        const monthRecords = filteredRecords.filter(record => {
-            const recordDate = new Date(record.date);
-            return recordDate.getMonth() === parseInt(month) - 1 && 
-                   recordDate.getFullYear() === parseInt(year);
-        });
         
-        const stats = {
-            present_days: monthRecords.filter(r => r.status === 'present').length,
-            total_hours: monthRecords.reduce((sum, r) => sum + (r.total_hours || 0), 0),
-            total_overtime: monthRecords.reduce((sum, r) => sum + (r.overtime_hours || 0), 0),
-            absent_days: monthRecords.filter(r => r.status === 'absent').length
-        };
+        // Date filtering
+        if (start_date && end_date) {
+            filters.start_date = start_date;
+            filters.end_date = end_date;
+        }
         
-        res.writeHead(200);
-        res.end(JSON.stringify({ success: true, data: stats }));
-    } else {
-        // Return filtered records
-        res.writeHead(200);
-        res.end(JSON.stringify({ success: true, data: filteredRecords }));
+        // Get filtered records from database
+        let filteredRecords = await dbOps.getAttendanceHistory(filters);
+        
+        // Handle different actions
+        if (action === 'stats' && month && year) {
+            // Calculate monthly statistics
+            const monthRecords = filteredRecords.filter(record => {
+                const recordDate = new Date(record.date);
+                return recordDate.getMonth() === parseInt(month) - 1 && 
+                       recordDate.getFullYear() === parseInt(year);
+            });
+            
+            const stats = {
+                present_days: monthRecords.filter(r => r.status === 'present').length,
+                total_hours: monthRecords.reduce((sum, r) => sum + (r.total_hours || 0), 0),
+                total_overtime: monthRecords.reduce((sum, r) => sum + (r.overtime_hours || 0), 0),
+                absent_days: monthRecords.filter(r => r.status === 'absent').length
+            };
+            
+            res.writeHead(200);
+            res.end(JSON.stringify({ success: true, data: stats }));
+        } else {
+            // Return filtered records
+            res.writeHead(200);
+            res.end(JSON.stringify({ success: true, data: filteredRecords }));
+        }
+    } catch (error) {
+        console.error('❌ Error fetching attendance history:', error);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to fetch attendance history' }));
     }
 }
 
@@ -1145,7 +1163,7 @@ function handleGetAttendancePolicy(req, res) {
     }));
 }
 
-function handleGetViolations(req, res) {
+async function handleGetViolations(req, res) {
     const session = getSession(req);
     
     // Only admin and manager can view violations
@@ -1178,16 +1196,21 @@ function handleGetViolations(req, res) {
         early_tolerance: 15
     };
     
-    // Filter records by date range and employee
-    let filteredRecords = attendanceRecords.filter(record => 
-        record.date >= start_date && record.date <= end_date
-    );
-    
+    // Filter records by date range and employee using database
+    let filters = { start_date, end_date };
     if (employee_id) {
-        filteredRecords = filteredRecords.filter(record => 
-            record.employee_id == employee_id
-        );
+        filters.employee_id = employee_id;
     }
+    
+    const filteredRecords = USE_DATABASE
+        ? await dbOps.getAttendanceHistory(filters)
+        : attendanceRecords.filter(record => {
+            let match = record.date >= start_date && record.date <= end_date;
+            if (employee_id) {
+                match = match && record.employee_id == employee_id;
+            }
+            return match;
+        });
     
     // Calculate violations
     const violations = [];
@@ -1211,7 +1234,7 @@ function handleGetViolations(req, res) {
     }));
 }
 
-function handleExcuseViolations(req, res, data) {
+async function handleExcuseViolations(req, res, data) {
     const session = getSession(req);
     
     // Only admin can excuse violations
@@ -1233,39 +1256,68 @@ function handleExcuseViolations(req, res, data) {
         return;
     }
     
-    // Find and update attendance records
-    let excusedCount = 0;
-    
-    attendanceRecords.forEach(record => {
-        if (record.employee_id == employee_id && 
-            record.date >= start_date && 
-            record.date <= end_date) {
-            
-            if (!record.excused_violations) {
-                record.excused_violations = [];
-            }
-            
-            record.excused_violations.push({
-                excused_at: new Date().toISOString(),
-                excused_by: session.email,
-                reason: reason
+    try {
+        // Find and update attendance records
+        let excusedCount = 0;
+        
+        if (USE_DATABASE) {
+            // Get records from database
+            const records = await dbOps.getAttendanceHistory({
+                employee_id,
+                start_date,
+                end_date
             });
             
-            excusedCount++;
+            // Update each record
+            for (const record of records) {
+                const excusedData = {
+                    excused_violations: JSON.stringify([{
+                        excused_at: new Date().toISOString(),
+                        excused_by: session.email,
+                        reason: reason
+                    }])
+                };
+                await dbOps.updateAttendance(record.id, excusedData);
+                excusedCount++;
+            }
+        } else {
+            // Fallback to file-based
+            attendanceRecords.forEach(record => {
+                if (record.employee_id == employee_id && 
+                    record.date >= start_date && 
+                    record.date <= end_date) {
+                    
+                    if (!record.excused_violations) {
+                        record.excused_violations = [];
+                    }
+                    
+                    record.excused_violations.push({
+                        excused_at: new Date().toISOString(),
+                        excused_by: session.email,
+                        reason: reason
+                    });
+                    
+                    excusedCount++;
+                }
+            });
+            
+            // Save data
+            saveData();
         }
-    });
-    
-    // Save data
-    saveData();
-    
-    console.log(`${excusedCount} violations excused by ${session.email} for employee ${employee_id}`);
-    
-    res.writeHead(200);
-    res.end(JSON.stringify({ 
-        success: true, 
-        count: excusedCount,
-        message: `${excusedCount} violations have been excused`
-    }));
+        
+        console.log(`${excusedCount} violations excused by ${session.email} for employee ${employee_id}`);
+        
+        res.writeHead(200);
+        res.end(JSON.stringify({ 
+            success: true, 
+            count: excusedCount,
+            message: `${excusedCount} violations have been excused`
+        }));
+    } catch (error) {
+        console.error('❌ Error excusing violations:', error);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to excuse violations' }));
+    }
 }
 
 // Helper function to calculate violations for a record
@@ -1724,25 +1776,16 @@ async function handleAddEmployee(req, res, data) {
 
     try {
         // Check if email already exists
-        if (USE_DATABASE) {
-            const existingUser = await dbOps.getUserByEmail(data.email.trim().toLowerCase());
-            if (existingUser) {
-                res.writeHead(400);
-                res.end(JSON.stringify({ error: 'Email address already exists' }));
-                return;
-            }
-        } else {
-            if (users[data.email]) {
-                res.writeHead(400);
-                res.end(JSON.stringify({ error: 'Email address already exists' }));
-                return;
-            }
+        const existingUser = await dbOps.getUserByEmail(data.email.trim().toLowerCase());
+        if (existingUser) {
+            res.writeHead(400);
+            res.end(JSON.stringify({ error: 'Email address already exists' }));
+            return;
         }
 
         // Generate new employee ID
-        const maxId = USE_DATABASE 
-            ? (await dbOps.getAllEmployees()).reduce((max, emp) => Math.max(max, emp.id), 0)
-            : (employees.length > 0 ? Math.max(...employees.map(emp => emp.id)) : 0);
+        const allEmployees = await dbOps.getAllEmployees();
+        const maxId = allEmployees.reduce((max, emp) => Math.max(max, emp.id), 0);
         
         const currentYear = new Date().getFullYear();
         const newEmployee = {
@@ -1779,15 +1822,8 @@ async function handleAddEmployee(req, res, data) {
             password: tempPassword
         };
 
-        if (USE_DATABASE) {
-            // Use database transaction to insert both employee and user
-            await dbOps.addEmployee(newEmployee, userData);
-        } else {
-            // File-based fallback
-            users[data.email.trim().toLowerCase()] = userData;
-            employees.push(newEmployee);
-            saveData();
-        }
+        // Use database transaction to insert both employee and user
+        await dbOps.addEmployee(newEmployee, userData);
         
         console.log(`New ${assignedRole} added: ${buildEmployeeName(newEmployee)}`);
         console.log(`Login credentials created - Email: ${data.email}, Password: ${tempPassword}, Role: ${assignedRole}`);
@@ -1873,7 +1909,7 @@ async function handleGetDepartments(req, res) {
     }
 }
 
-function handleAddDepartment(req, res, data) {
+async function handleAddDepartment(req, res, data) {
     const session = getSession(req);
     
     // Only admin and manager can add departments
@@ -1892,43 +1928,54 @@ function handleAddDepartment(req, res, data) {
         return;
     }
     
-    // Check if department already exists
-    const existingDept = departments.find(dept => 
-        dept.name.toLowerCase() === data.name.trim().toLowerCase()
-    );
-    
-    if (existingDept) {
-        res.writeHead(400);
-        res.end(JSON.stringify({ error: 'Department already exists' }));
-        return;
+    try {
+        // Check if department already exists
+        const existingDepts = USE_DATABASE
+            ? await dbOps.getDepartments()
+            : departments;
+        
+        const existingDept = existingDepts.find(dept => 
+            dept.name.toLowerCase() === data.name.trim().toLowerCase()
+        );
+        
+        if (existingDept) {
+            res.writeHead(400);
+            res.end(JSON.stringify({ error: 'Department already exists' }));
+            return;
+        }
+        
+        if (USE_DATABASE) {
+            // Add to database
+            const departmentId = await dbOps.addDepartment(data.name.trim(), data.description ? data.description.trim() : null);
+            
+            const newDepartment = {
+                id: departmentId,
+                name: data.name.trim(),
+                description: data.description ? data.description.trim() : '',
+                created_at: new Date().toISOString(),
+                created_by: session.email
+            };
+            
+            console.log(`New department added by ${session.email}: ${newDepartment.name}`);
+            
+            res.writeHead(200);
+            res.end(JSON.stringify({ 
+                success: true, 
+                data: newDepartment,
+                message: 'Department added successfully'
+            }));
+        } else {
+            res.writeHead(500);
+            res.end(JSON.stringify({ error: 'Database mode required for this operation' }));
+        }
+    } catch (error) {
+        console.error('❌ Error adding department:', error);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to add department' }));
     }
-    
-    // Create new department
-    const maxId = departments.length > 0 ? Math.max(...departments.map(dept => dept.id)) : 0;
-    const newDepartment = {
-        id: maxId + 1,
-        name: data.name.trim(),
-        description: data.description ? data.description.trim() : '',
-        created_at: new Date().toISOString(),
-        created_by: session.email
-    };
-    
-    departments.push(newDepartment);
-    
-    // Save data to file
-    saveData();
-    
-    console.log(`New department added by ${session.email}: ${newDepartment.name}`);
-    
-    res.writeHead(200);
-    res.end(JSON.stringify({ 
-        success: true, 
-        data: newDepartment,
-        message: 'Department added successfully'
-    }));
 }
 
-function handleLeaveRequest(req, res, data) {
+async function handleLeaveRequest(req, res, data) {
     const session = getSession(req);
     if (!session) {
         res.writeHead(401);
@@ -1936,105 +1983,114 @@ function handleLeaveRequest(req, res, data) {
         return;
     }
 
-    const employee = employees.find(emp => emp.email === session.email);
-    
-    if (!employee) {
-        res.writeHead(404);
-        res.end(JSON.stringify({ error: 'Employee record not found' }));
-        return;
-    }
-
-    // Check for duplicate/overlapping leave requests
-    const { start_date, end_date } = data;
-    if (start_date && end_date) {
-        const requestStartDate = new Date(start_date);
-        const requestEndDate = new Date(end_date);
+    try {
+        const allEmployees = await dbOps.getAllEmployees();
+        const employee = allEmployees.find(emp => emp.email === session.email);
         
-        const overlappingRequests = leaveRequests.filter(leave => {
-            // Only check this employee's requests
-            if (leave.employee_id !== employee.id) return false;
-            
-            // Only check pending or approved requests
-            if (leave.status !== 'pending' && leave.status !== 'approved') return false;
-            
-            const existingStartDate = new Date(leave.start_date);
-            const existingEndDate = new Date(leave.end_date);
-            
-            // Check for date overlap
-            return (requestStartDate <= existingEndDate && requestEndDate >= existingStartDate);
-        });
-
-        if (overlappingRequests.length > 0) {
-            const conflict = overlappingRequests[0];
-            res.writeHead(400);
-            res.end(JSON.stringify({ 
-                error: `You already have a ${conflict.status} leave request for overlapping dates (${conflict.start_date} to ${conflict.end_date}). Please choose different dates or cancel the existing request.`
-            }));
+        if (!employee) {
+            res.writeHead(404);
+            res.end(JSON.stringify({ error: 'Employee record not found' }));
             return;
         }
-    }
 
-    // Check leave balance validation
-    const { days_requested } = data;
-    if (days_requested && days_requested > 0) {
-        // Calculate current leave balance
-        const currentYear = new Date().getFullYear();
-        const annualLeaveEntitlement = employee.annual_leave_days || 22;
-        
-        // Find all approved leave requests for current year
-        const approvedLeaves = leaveRequests.filter(leave => 
-            leave.employee_id === employee.id && 
-            leave.status === 'approved' &&
-            new Date(leave.start_date).getFullYear() === currentYear
-        );
-        
-        // Calculate total days used
-        const totalDaysUsed = approvedLeaves.reduce((total, leave) => {
-            return total + (leave.days_requested || 0);
-        }, 0);
-        
-        // Calculate available days
-        const availableDays = Math.max(0, annualLeaveEntitlement - totalDaysUsed);
-        
-        // Check if requested days exceed available balance
-        if (days_requested > availableDays) {
-            res.writeHead(400);
-            res.end(JSON.stringify({ 
-                error: `Insufficient leave balance. You are requesting ${days_requested} days but only have ${availableDays} days available. Your annual entitlement is ${annualLeaveEntitlement} days and you have already used ${totalDaysUsed} days this year.`
-            }));
-            return;
+        // Check for duplicate/overlapping leave requests
+        const { start_date, end_date } = data;
+        if (start_date && end_date) {
+            const requestStartDate = new Date(start_date);
+            const requestEndDate = new Date(end_date);
+            
+            const allRequests = await dbOps.getLeaveRequests({ employee_id: employee.id });
+            
+            const overlappingRequests = allRequests.filter(leave => {
+                // Only check pending or approved requests
+                if (leave.status !== 'pending' && leave.status !== 'approved') return false;
+                
+                const existingStartDate = new Date(leave.start_date);
+                const existingEndDate = new Date(leave.end_date);
+                
+                // Check for date overlap
+                return (requestStartDate <= existingEndDate && requestEndDate >= existingStartDate);
+            });
+
+            if (overlappingRequests.length > 0) {
+                const conflict = overlappingRequests[0];
+                res.writeHead(400);
+                res.end(JSON.stringify({ 
+                    error: `You already have a ${conflict.status} leave request for overlapping dates (${conflict.start_date} to ${conflict.end_date}). Please choose different dates or cancel the existing request.`
+                }));
+                return;
+            }
         }
-        
-        console.log(`✅ Leave balance check passed: Requesting ${days_requested} days, Available: ${availableDays} days`);
+
+        // Check leave balance validation
+        const { days_requested } = data;
+        if (days_requested && days_requested > 0) {
+            // Calculate current leave balance
+            const currentYear = new Date().getFullYear();
+            const annualLeaveEntitlement = employee.annual_leave_days || 22;
+            
+            // Find all approved leave requests for current year
+            const allRequests = await dbOps.getLeaveRequests({ employee_id: employee.id, status: 'approved' });
+            
+            const approvedLeaves = allRequests.filter(leave =>
+                new Date(leave.start_date).getFullYear() === currentYear
+            );
+            
+            // Calculate total days used
+            const totalDaysUsed = approvedLeaves.reduce((total, leave) => {
+                return total + (parseFloat(leave.days_requested) || 0);
+            }, 0);
+            
+            // Calculate available days
+            const availableDays = Math.max(0, annualLeaveEntitlement - totalDaysUsed);
+            
+            // Check if requested days exceed available balance
+            if (days_requested > availableDays) {
+                res.writeHead(400);
+                res.end(JSON.stringify({ 
+                    error: `Insufficient leave balance. You are requesting ${days_requested} days but only have ${availableDays} days available. Your annual entitlement is ${annualLeaveEntitlement} days and you have already used ${totalDaysUsed} days this year.`
+                }));
+                return;
+            }
+            
+            console.log(`✅ Leave balance check passed: Requesting ${days_requested} days, Available: ${availableDays} days`);
+        }
+
+        // Add to database
+        const requestData = {
+                employee_id: employee.id,
+                employee_name: buildEmployeeName(employee),
+                leave_type: data.leave_type,
+                leave_duration: data.leave_duration,
+                start_date: data.start_date,
+                end_date: data.end_date,
+                reason: data.reason || null,
+                days_requested: data.days_requested,
+                created_by: session.email
+            };
+            
+            const requestId = await dbOps.createLeaveRequest(requestData);
+            
+            const newRequest = {
+                id: requestId,
+                ...requestData,
+                status: 'pending',
+                created_at: new Date().toISOString().split('T')[0]
+            };
+            
+            // Send notifications to managers and admins
+            console.log(`📧 Sending notifications for leave request ID: ${newRequest.id}`);
+            await sendLeaveRequestNotifications(newRequest, employee);
+            
+            console.log(`New leave request: ${newRequest.employee_name} - ${newRequest.leave_type}`);
+
+            res.writeHead(200);
+            res.end(JSON.stringify({ success: true, data: newRequest }));
+    } catch (error) {
+        console.error('❌ Error creating leave request:', error);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to create leave request' }));
     }
-
-    const maxId = leaveRequests.length > 0 ? Math.max(...leaveRequests.map(req => req.id)) : 0;
-    
-    const newRequest = {
-        id: maxId + 1,
-        employee_id: employee ? employee.id : session.user_id,
-        employee_name: employee ? buildEmployeeName(employee) : session.email,
-        ...data,
-        status: 'pending',
-        created_at: new Date().toISOString().split('T')[0],
-        created_by: session.email
-    };
-
-    leaveRequests.push(newRequest);
-    
-    // Send notifications to managers and admins
-    console.log(`📧 Sending notifications for leave request ID: ${newRequest.id}`);
-    sendLeaveRequestNotifications(newRequest, employee);
-    
-    // Save data to file (including new notifications)
-    saveData();
-    
-    console.log(`💾 Data saved with ${notifications.length} total notifications`);
-    
-    console.log(`New leave request: ${newRequest.employee_name} - ${newRequest.leave_type}`);
-
-    res.writeHead(200);
-    res.end(JSON.stringify({ success: true, data: newRequest }));
 }
 
 async function handleGetLeaveRequests(req, res) {
@@ -2046,34 +2102,20 @@ async function handleGetLeaveRequests(req, res) {
     }
 
     try {
-        if (USE_DATABASE) {
-            // Use database operations
-            let filters = {};
-            
-            // Filter by role - employees can only see their own requests
-            if (session.role === 'employee') {
-                const employee = await dbOps.getAllEmployees();
-                const currentEmployee = employee.find(emp => emp.email === session.email);
-                filters.employee_id = currentEmployee ? currentEmployee.id : session.user_id;
-            }
-            
-            const requests = await dbOps.getLeaveRequests(filters);
-            
-            res.writeHead(200);
-            res.end(JSON.stringify({ success: true, data: requests }));
-        } else {
-            // Fallback to file-based operations
-            let filteredRequests = leaveRequests;
-            
-            // Filter by role
-            if (session.role === 'employee') {
-                const employee = employees.find(emp => emp.email === session.email);
-                filteredRequests = leaveRequests.filter(req => req.employee_id === (employee ? employee.id : session.user_id));
-            }
-
-            res.writeHead(200);
-            res.end(JSON.stringify({ success: true, data: filteredRequests }));
+        // Use database operations
+        let filters = {};
+        
+        // Filter by role - employees can only see their own requests
+        if (session.role === 'employee') {
+            const allEmployees = await dbOps.getAllEmployees();
+            const currentEmployee = allEmployees.find(emp => emp.email === session.email);
+            filters.employee_id = currentEmployee ? currentEmployee.id : session.user_id;
         }
+        
+        const requests = await dbOps.getLeaveRequests(filters);
+        
+        res.writeHead(200);
+        res.end(JSON.stringify({ success: true, data: requests }));
     } catch (error) {
         console.error('Error fetching leave requests:', error);
         res.writeHead(500);
@@ -2081,7 +2123,7 @@ async function handleGetLeaveRequests(req, res) {
     }
 }
 
-function handleUpdateLeaveRequest(req, res, pathname, data) {
+async function handleUpdateLeaveRequest(req, res, pathname, data) {
     const session = getSession(req);
     if (!session || (session.role !== 'admin' && session.role !== 'manager')) {
         res.writeHead(403);
@@ -2089,83 +2131,39 @@ function handleUpdateLeaveRequest(req, res, pathname, data) {
         return;
     }
 
-    const requestId = parseInt(pathname.split('/').pop());
-    const requestIndex = leaveRequests.findIndex(req => req.id === requestId);
-
-    if (requestIndex === -1) {
-        res.writeHead(404);
-        res.end(JSON.stringify({ error: 'Request not found' }));
-        return;
-    }
-
-    // Add approval metadata
-    data.updated_at = new Date().toISOString();
-    data.updated_by = session.email;
-    
-    const oldRequest = { ...leaveRequests[requestIndex] };
-    leaveRequests[requestIndex] = { ...leaveRequests[requestIndex], ...data };
-    
-    // Send notification to employee about status change
-    if (data.status && data.status !== oldRequest.status) {
-        sendLeaveStatusNotification(leaveRequests[requestIndex], session.email, data.status);
-    }
-    
-    // Save data to file
-    saveData();
-    
-    console.log(`Leave request updated by ${session.email}: ${requestId} - ${data.status}`);
-
-    res.writeHead(200);
-    res.end(JSON.stringify({ success: true, data: leaveRequests[requestIndex] }));
-}
-
-function handleAttendanceReport(req, res) {
-    const session = getSession(req);
-    if (!session) {
-        res.writeHead(401);
-        res.end(JSON.stringify({ error: 'Not authenticated' }));
-        return;
-    }
-
-    const parsedUrl = url.parse(req.url, true);
-    const { start_date, end_date, department } = parsedUrl.query;
-
-    let filteredRecords = [...attendanceRecords];
-
-    // Filter by date range
-    if (start_date && end_date) {
-        filteredRecords = filteredRecords.filter(record => 
-            record.date >= start_date && record.date <= end_date
-        );
-    }
-
-    // Filter by department
-    if (department) {
-        // Get employees from the specified department
-        const deptEmployees = employees.filter(emp => emp.department === department);
-        const deptEmployeeIds = deptEmployees.map(emp => emp.id);
+    try {
+        const requestId = parseInt(pathname.split('/').pop());
         
-        filteredRecords = filteredRecords.filter(record => 
-            deptEmployeeIds.includes(record.employee_id)
-        );
-    }
-
-    // Role-based filtering
-    if (session.role === 'employee') {
-        const employee = employees.find(emp => emp.email === session.email);
-        if (employee) {
-            filteredRecords = filteredRecords.filter(record => record.employee_id === employee.id);
+        // Add approval metadata
+        const status = data.status;
+        const notes = data.notes || null;
+        const updatedBy = session.email;
+        
+        // Update leave request in database
+        await dbOps.updateLeaveRequestStatus(requestId, status, notes, updatedBy);
+        
+        // Fetch updated request to return
+        const allRequests = await dbOps.getLeaveRequests({});
+        const updatedRequest = allRequests.find(req => req.id === requestId);
+        
+        if (!updatedRequest) {
+            res.writeHead(404);
+            res.end(JSON.stringify({ error: 'Request not found' }));
+            return;
         }
+        
+        console.log(`Leave request updated by ${session.email}: ${requestId} - ${status}`);
+
+        res.writeHead(200);
+        res.end(JSON.stringify({ success: true, data: updatedRequest }));
+    } catch (error) {
+        console.error('❌ Error updating leave request:', error);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to update leave request' }));
     }
-
-    // Sort by date (most recent first)
-    filteredRecords.sort((a, b) => new Date(b.date) - new Date(a.date));
-
-    res.writeHead(200);
-    res.end(JSON.stringify({ success: true, data: filteredRecords }));
 }
 
-function handleLeaveReport(req, res) {
+async function handleAttendanceReport(req, res) {
     const session = getSession(req);
     if (!session) {
         res.writeHead(401);
@@ -2173,46 +2171,70 @@ function handleLeaveReport(req, res) {
         return;
     }
 
-    const parsedUrl = url.parse(req.url, true);
-    const { start_date, end_date, department } = parsedUrl.query;
+    try {
+        const parsedUrl = url.parse(req.url, true);
+        const { start_date, end_date, department } = parsedUrl.query;
 
-    let filteredRequests = [...leaveRequests];
-
-    // Filter by date range (based on leave request creation date)
-    if (start_date && end_date) {
-        filteredRequests = filteredRequests.filter(request => {
-            const requestDate = request.created_at.split('T')[0]; // Get date part only
-            return requestDate >= start_date && requestDate <= end_date;
-        });
-    }
-
-    // Filter by department
-    if (department) {
-        // Get employees from the specified department
-        const deptEmployees = employees.filter(emp => emp.department === department);
-        const deptEmployeeIds = deptEmployees.map(emp => emp.id);
+        let filters = {};
         
-        filteredRequests = filteredRequests.filter(request => 
-            deptEmployeeIds.includes(request.employee_id)
-        );
-    }
-
-    // Role-based filtering
-    if (session.role === 'employee') {
-        const employee = employees.find(emp => emp.email === session.email);
-        if (employee) {
-            filteredRequests = filteredRequests.filter(request => request.employee_id === employee.id);
+        // Filter by date range
+        if (start_date && end_date) {
+            filters.start_date = start_date;
+            filters.end_date = end_date;
         }
+        
+        // Get all employees if needed for department filtering
+        const allEmployees = USE_DATABASE ? await dbOps.getAllEmployees() : employees;
+
+        // Role-based filtering
+        if (session.role === 'employee') {
+            const employee = allEmployees.find(emp => emp.email === session.email);
+            if (employee) {
+                filters.employee_id = employee.id;
+            }
+        }
+
+        // Get records from database or file
+        let filteredRecords = USE_DATABASE
+            ? await dbOps.getAttendanceHistory(filters)
+            : attendanceRecords.filter(record => {
+                if (start_date && end_date) {
+                    return record.date >= start_date && record.date <= end_date;
+                }
+                return true;
+            });
+
+        // Filter by department (client-side filtering)
+        if (department) {
+            const deptEmployees = allEmployees.filter(emp => emp.department === department);
+            const deptEmployeeIds = deptEmployees.map(emp => emp.id);
+            
+            filteredRecords = filteredRecords.filter(record => 
+                deptEmployeeIds.includes(record.employee_id)
+            );
+        }
+
+        // Role-based filtering for file-based
+        if (!USE_DATABASE && session.role === 'employee') {
+            const employee = allEmployees.find(emp => emp.email === session.email);
+            if (employee) {
+                filteredRecords = filteredRecords.filter(record => record.employee_id === employee.id);
+            }
+        }
+
+        // Sort by date (most recent first)
+        filteredRecords.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        res.writeHead(200);
+        res.end(JSON.stringify({ success: true, data: filteredRecords }));
+    } catch (error) {
+        console.error('❌ Error fetching attendance report:', error);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to fetch attendance report' }));
     }
-
-    // Sort by creation date (most recent first)
-    filteredRequests.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
-    res.writeHead(200);
-    res.end(JSON.stringify({ success: true, data: filteredRequests }));
 }
 
-function handleEmployeeReport(req, res) {
+async function handleLeaveReport(req, res) {
     const session = getSession(req);
     if (!session) {
         res.writeHead(401);
@@ -2220,29 +2242,56 @@ function handleEmployeeReport(req, res) {
         return;
     }
 
-    const parsedUrl = url.parse(req.url, true);
-    const { department } = parsedUrl.query;
+    try {
+        const parsedUrl = url.parse(req.url, true);
+        const { start_date, end_date, department } = parsedUrl.query;
 
-    let filteredEmployees = [...employees];
+        // Get all leave requests and employees
+        const allRequests = USE_DATABASE ? await dbOps.getLeaveRequests({}) : leaveRequests;
+        const allEmployees = USE_DATABASE ? await dbOps.getAllEmployees() : employees;
+        
+        let filteredRequests = [...allRequests];
 
-    // Filter by department
-    if (department) {
-        filteredEmployees = filteredEmployees.filter(emp => emp.department === department);
+        // Filter by date range (based on leave request creation date)
+        if (start_date && end_date) {
+            filteredRequests = filteredRequests.filter(request => {
+                const requestDate = request.created_at.split('T')[0]; // Get date part only
+                return requestDate >= start_date && requestDate <= end_date;
+            });
+        }
+
+        // Filter by department
+        if (department) {
+            // Get employees from the specified department
+            const deptEmployees = allEmployees.filter(emp => emp.department === department);
+            const deptEmployeeIds = deptEmployees.map(emp => emp.id);
+            
+            filteredRequests = filteredRequests.filter(request => 
+                deptEmployeeIds.includes(request.employee_id)
+            );
+        }
+
+        // Role-based filtering
+        if (session.role === 'employee') {
+            const employee = allEmployees.find(emp => emp.email === session.email);
+            if (employee) {
+                filteredRequests = filteredRequests.filter(request => request.employee_id === employee.id);
+            }
+        }
+
+        // Sort by creation date (most recent first)
+        filteredRequests.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+        res.writeHead(200);
+        res.end(JSON.stringify({ success: true, data: filteredRequests }));
+    } catch (error) {
+        console.error('❌ Error fetching leave report:', error);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to fetch leave report' }));
     }
-
-    // Role-based filtering
-    if (session.role === 'employee') {
-        filteredEmployees = filteredEmployees.filter(emp => emp.email === session.email);
-    }
-
-    // Sort by name
-    filteredEmployees.sort((a, b) => buildEmployeeName(a).localeCompare(buildEmployeeName(b)));
-
-    res.writeHead(200);
-    res.end(JSON.stringify({ success: true, data: filteredEmployees }));
 }
 
-function handleDepartmentReport(req, res) {
+async function handleEmployeeReport(req, res) {
     const session = getSession(req);
     if (!session) {
         res.writeHead(401);
@@ -2250,40 +2299,96 @@ function handleDepartmentReport(req, res) {
         return;
     }
 
-    // Get department statistics
-    const departmentStats = departments.map(dept => {
-        const deptEmployees = employees.filter(emp => emp.department === dept.name);
-        const activeEmployees = deptEmployees.filter(emp => emp.status === 'active');
-        
-        // Calculate recent attendance for this department
-        const recentDate = new Date();
-        recentDate.setDate(recentDate.getDate() - 30); // Last 30 days
-        const recentDateStr = recentDate.toISOString().split('T')[0];
-        
-        const deptEmployeeIds = deptEmployees.map(emp => emp.id);
-        const recentAttendance = attendanceRecords.filter(record => 
-            deptEmployeeIds.includes(record.employee_id) && record.date >= recentDateStr
-        );
-        
-        const presentCount = recentAttendance.filter(r => r.status === 'present').length;
-        const attendanceRate = recentAttendance.length > 0 ? 
-            Math.round((presentCount / recentAttendance.length) * 100) : 0;
+    try {
+        const parsedUrl = url.parse(req.url, true);
+        const { department } = parsedUrl.query;
 
-        return {
-            ...dept,
-            total_employees: deptEmployees.length,
-            active_employees: activeEmployees.length,
-            inactive_employees: deptEmployees.length - activeEmployees.length,
-            attendance_rate: attendanceRate,
-            recent_attendance_records: recentAttendance.length
-        };
-    });
+        const allEmployees = USE_DATABASE ? await dbOps.getAllEmployees() : employees;
+        let filteredEmployees = [...allEmployees];
 
-    res.writeHead(200);
-    res.end(JSON.stringify({ success: true, data: departmentStats }));
+        // Filter by department
+        if (department) {
+            filteredEmployees = filteredEmployees.filter(emp => emp.department === department);
+        }
+
+        // Role-based filtering
+        if (session.role === 'employee') {
+            filteredEmployees = filteredEmployees.filter(emp => emp.email === session.email);
+        }
+
+        // Sort by name
+        filteredEmployees.sort((a, b) => buildEmployeeName(a).localeCompare(buildEmployeeName(b)));
+
+        res.writeHead(200);
+        res.end(JSON.stringify({ success: true, data: filteredEmployees }));
+    } catch (error) {
+        console.error('❌ Error fetching employee report:', error);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to fetch employee report' }));
+    }
 }
 
-function handleChangePassword(req, res, data) {
+async function handleDepartmentReport(req, res) {
+    const session = getSession(req);
+    if (!session) {
+        res.writeHead(401);
+        res.end(JSON.stringify({ error: 'Not authenticated' }));
+        return;
+    }
+
+    try {
+        // Get departments and employees from database
+        const allDepartments = USE_DATABASE ? await dbOps.getDepartments() : departments;
+        const allEmployees = USE_DATABASE ? await dbOps.getAllEmployees() : employees;
+
+        // Get department statistics
+        const departmentStats = await Promise.all(allDepartments.map(async dept => {
+            const deptEmployees = allEmployees.filter(emp => emp.department === dept.name);
+            const activeEmployees = deptEmployees.filter(emp => emp.status === 'active');
+            
+            // Calculate recent attendance for this department
+            const recentDate = new Date();
+            recentDate.setDate(recentDate.getDate() - 30); // Last 30 days
+            const recentDateStr = recentDate.toISOString().split('T')[0];
+            
+            const deptEmployeeIds = deptEmployees.map(emp => emp.id);
+            
+            // Get attendance records
+            const recentAttendance = USE_DATABASE
+                ? await dbOps.getAttendanceHistory({ start_date: recentDateStr, end_date: new Date().toISOString().split('T')[0] })
+                : attendanceRecords.filter(record => 
+                    deptEmployeeIds.includes(record.employee_id) && record.date >= recentDateStr
+                );
+            
+            // Filter by department employees
+            const deptAttendance = recentAttendance.filter(record => 
+                deptEmployeeIds.includes(record.employee_id)
+            );
+            
+            const presentCount = deptAttendance.filter(r => r.status === 'present').length;
+            const attendanceRate = deptAttendance.length > 0 ? 
+                Math.round((presentCount / deptAttendance.length) * 100) : 0;
+
+            return {
+                ...dept,
+                total_employees: deptEmployees.length,
+                active_employees: activeEmployees.length,
+                inactive_employees: deptEmployees.length - activeEmployees.length,
+                attendance_rate: attendanceRate,
+                recent_attendance_records: deptAttendance.length
+            };
+        }));
+
+        res.writeHead(200);
+        res.end(JSON.stringify({ success: true, data: departmentStats }));
+    } catch (error) {
+        console.error('❌ Error fetching department report:', error);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to fetch department report' }));
+    }
+}
+
+async function handleChangePassword(req, res, data) {
     const session = getSession(req);
     if (!session) {
         res.writeHead(401);
@@ -2294,29 +2399,37 @@ function handleChangePassword(req, res, data) {
     const { currentPassword, newPassword } = data;
     const userEmail = session.email;
 
-    // Verify current password
-    if (!users[userEmail] || users[userEmail].password !== currentPassword) {
-        res.writeHead(400);
-        res.end(JSON.stringify({ error: 'Current password is incorrect' }));
-        return;
+    try {
+        // Get user from database or file
+        const user = USE_DATABASE
+            ? await dbOps.getUserByEmail(userEmail)
+            : users[userEmail];
+
+        // Verify current password
+        if (!user || user.password !== currentPassword) {
+            res.writeHead(400);
+            res.end(JSON.stringify({ error: 'Current password is incorrect' }));
+            return;
+        }
+
+        // Update password
+        await dbOps.updateUserPassword(userEmail, newPassword);
+        
+        console.log(`Password changed for user: ${userEmail}`);
+
+        res.writeHead(200);
+        res.end(JSON.stringify({ 
+            success: true, 
+            message: 'Password changed successfully' 
+        }));
+    } catch (error) {
+        console.error('❌ Error changing password:', error);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to change password' }));
     }
-
-    // Update password
-    users[userEmail].password = newPassword;
-    
-    // Save data
-    saveData();
-    
-    console.log(`Password changed for user: ${userEmail}`);
-
-    res.writeHead(200);
-    res.end(JSON.stringify({ 
-        success: true, 
-        message: 'Password changed successfully' 
-    }));
 }
 
-function handleResetPassword(req, res, data) {
+async function handleResetPassword(req, res, data) {
     const session = getSession(req);
     
     // Only admin and manager can reset passwords for other employees
@@ -2337,49 +2450,54 @@ function handleResetPassword(req, res, data) {
         return;
     }
 
-    // Check if target user exists
-    if (!users[targetEmail]) {
-        res.writeHead(404);
-        res.end(JSON.stringify({ error: 'User not found' }));
-        return;
-    }
+    try {
+        // Check if target user exists
+        const targetUser = await dbOps.getUserByEmail(targetEmail);
+        
+        if (!targetUser) {
+            res.writeHead(404);
+            res.end(JSON.stringify({ error: 'User not found' }));
+            return;
+        }
 
-    // Additional access control: Managers cannot reset admin passwords
-    if (session.role === 'manager' && users[targetEmail].role === 'admin') {
-        res.writeHead(403);
+        // Additional access control: Managers cannot reset admin passwords
+        if (session.role === 'manager' && targetUser.role === 'admin') {
+            res.writeHead(403);
+            res.end(JSON.stringify({ 
+                error: 'Managers cannot reset administrator passwords' 
+            }));
+            return;
+        }
+
+        // Prevent users from resetting their own password through this endpoint
+        if (targetEmail === session.email) {
+            res.writeHead(400);
+            res.end(JSON.stringify({ 
+                error: 'Use change password feature to update your own password' 
+            }));
+            return;
+        }
+
+        // Use common password for reset
+        const finalPassword = '123456';
+        
+        // Update password
+        await dbOps.updateUserPassword(targetEmail, finalPassword);
+        
+        console.log(`Password reset by ${session.email} for user: ${targetEmail}`);
+
+        res.writeHead(200);
         res.end(JSON.stringify({ 
-            error: 'Managers cannot reset administrator passwords' 
+            success: true, 
+            message: 'Password reset successfully',
+            newPassword: finalPassword,
+            targetUser: targetEmail
         }));
-        return;
+    } catch (error) {
+        console.error('❌ Error resetting password:', error);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to reset password' }));
     }
-
-    // Prevent users from resetting their own password through this endpoint
-    if (targetEmail === session.email) {
-        res.writeHead(400);
-        res.end(JSON.stringify({ 
-            error: 'Use change password feature to update your own password' 
-        }));
-        return;
-    }
-
-    // Use common password for reset
-    const finalPassword = '123456';
-    
-    // Update password
-    users[targetEmail].password = finalPassword;
-    
-    // Save data
-    saveData();
-    
-    console.log(`Password reset by ${session.email} for user: ${targetEmail}`);
-
-    res.writeHead(200);
-    res.end(JSON.stringify({ 
-        success: true, 
-        message: 'Password reset successfully',
-        newPassword: finalPassword,
-        targetUser: targetEmail
-    }));
 }
 
 async function handleUpdateEmployee(req, res, pathname, data) {
@@ -2393,8 +2511,8 @@ async function handleUpdateEmployee(req, res, pathname, data) {
     try {
         const employeeId = parseInt(pathname.split('/').pop());
         
-        // Get employee from database or file
-        const allEmployees = USE_DATABASE ? await dbOps.getAllEmployees() : employees;
+        // Get employee from database
+        const allEmployees = await dbOps.getAllEmployees();
         const employeeIndex = allEmployees.findIndex(emp => emp.id === employeeId);
 
         if (employeeIndex === -1) {
@@ -2489,18 +2607,6 @@ async function handleUpdateEmployee(req, res, pathname, data) {
                 data: updatedEmployee,
                 message: 'Employee updated successfully' 
             }));
-        } else {
-            employees[employeeIndex] = { ...employees[employeeIndex], ...data };
-            saveData();
-            
-            console.log(`Employee updated by ${session.email}: ${buildEmployeeName(employees[employeeIndex])}`);
-            
-            res.writeHead(200);
-            res.end(JSON.stringify({ 
-                success: true, 
-                data: employees[employeeIndex],
-                message: 'Employee updated successfully' 
-            }));
         }
     } catch (error) {
         console.error('❌ Error updating employee:', error);
@@ -2524,8 +2630,8 @@ async function handleDeleteEmployee(req, res, pathname) {
     try {
         const employeeId = parseInt(pathname.split('/').pop());
         
-        // Get employee from database or file
-        const allEmployees = USE_DATABASE ? await dbOps.getAllEmployees() : employees;
+        // Get employee from database
+        const allEmployees = await dbOps.getAllEmployees();
         const employeeIndex = allEmployees.findIndex(emp => emp.id === employeeId);
 
         if (employeeIndex === -1) {
@@ -2598,7 +2704,7 @@ async function handleDeleteEmployee(req, res, pathname) {
 }
 
 // PDF Export Handler
-function handlePDFExport(req, res, data) {
+async function handlePDFExport(req, res, data) {
     const session = getSession(req);
     if (!session) {
         res.writeHead(401);
@@ -2612,13 +2718,13 @@ function handlePDFExport(req, res, data) {
 
     try {
         if (reportType === 'attendance') {
-            reportData = attendanceRecords;
+            reportData = USE_DATABASE ? await dbOps.getAttendanceHistory({}) : attendanceRecords;
             reportTitle = 'Attendance Report';
         } else if (reportType === 'employees') {
-            reportData = employees;
+            reportData = USE_DATABASE ? await dbOps.getAllEmployees() : employees;
             reportTitle = 'Employee Report';
         } else if (reportType === 'leave') {
-            reportData = leaveRequests;
+            reportData = USE_DATABASE ? await dbOps.getLeaveRequests({}) : leaveRequests;
             reportTitle = 'Leave Report';
         }
 
@@ -2634,13 +2740,13 @@ function handlePDFExport(req, res, data) {
             filename: `${reportType}_report_${new Date().toISOString().split('T')[0]}.pdf`
         }));
     } catch (error) {
+        console.error('❌ Error generating PDF report:', error);
         res.writeHead(500);
         res.end(JSON.stringify({ error: 'Failed to generate PDF report' }));
     }
 }
 
-// Excel Export Handler
-function handleExcelExport(req, res, data) {
+async function handleExcelExport(req, res, data) {
     const session = getSession(req);
     if (!session) {
         res.writeHead(401);
@@ -2653,11 +2759,11 @@ function handleExcelExport(req, res, data) {
 
     try {
         if (reportType === 'attendance') {
-            reportData = attendanceRecords;
+            reportData = USE_DATABASE ? await dbOps.getAttendanceHistory({}) : attendanceRecords;
         } else if (reportType === 'employees') {
-            reportData = employees;
+            reportData = USE_DATABASE ? await dbOps.getAllEmployees() : employees;
         } else if (reportType === 'leave') {
-            reportData = leaveRequests;
+            reportData = USE_DATABASE ? await dbOps.getLeaveRequests({}) : leaveRequests;
         }
 
         // Generate CSV data (Excel-compatible)
@@ -2669,6 +2775,7 @@ function handleExcelExport(req, res, data) {
         });
         res.end(csvContent);
     } catch (error) {
+        console.error('❌ Error generating Excel report:', error);
         res.writeHead(500);
         res.end(JSON.stringify({ error: 'Failed to generate Excel report' }));
     }
@@ -2801,7 +2908,7 @@ function generateCSV(data, type) {
     return csvContent;
 }
 
-function handleGetLeaveBalance(req, res) {
+async function handleGetLeaveBalance(req, res) {
     const session = getSession(req);
     
     if (!session) {
@@ -2812,7 +2919,8 @@ function handleGetLeaveBalance(req, res) {
     
     try {
         // Find the current user's employee record
-        const employee = employees.find(emp => emp.email === session.email);
+        const allEmployees = USE_DATABASE ? await dbOps.getAllEmployees() : employees;
+        const employee = allEmployees.find(emp => emp.email === session.email);
         
         if (!employee) {
             res.writeHead(404);
@@ -2825,26 +2933,36 @@ function handleGetLeaveBalance(req, res) {
         const annualLeaveEntitlement = employee.annual_leave_days || 22;
         
         // Find all approved leave requests for current year
-        const approvedLeaves = leaveRequests.filter(leave => 
-            leave.employee_id === employee.id && 
-            leave.status === 'approved' &&
+        const allLeaveRequests = USE_DATABASE 
+            ? await dbOps.getLeaveRequests({ employee_id: employee.id, status: 'approved' })
+            : leaveRequests.filter(leave => 
+                leave.employee_id === employee.id && 
+                leave.status === 'approved'
+            );
+        
+        const approvedLeaves = allLeaveRequests.filter(leave =>
             new Date(leave.start_date).getFullYear() === currentYear
         );
         
         // Calculate total days used (including half-day leaves)
         const totalDaysUsed = approvedLeaves.reduce((total, leave) => {
-            return total + (leave.days_requested || 0);
+            return total + (parseFloat(leave.days_requested) || 0);
         }, 0);
         
         // Calculate pending leave requests for current year
-        const pendingLeaves = leaveRequests.filter(leave => 
-            leave.employee_id === employee.id && 
-            leave.status === 'pending' &&
+        const allPendingRequests = USE_DATABASE
+            ? await dbOps.getLeaveRequests({ employee_id: employee.id, status: 'pending' })
+            : leaveRequests.filter(leave => 
+                leave.employee_id === employee.id && 
+                leave.status === 'pending'
+            );
+        
+        const pendingLeaves = allPendingRequests.filter(leave =>
             new Date(leave.start_date).getFullYear() === currentYear
         );
         
         const totalPendingDays = pendingLeaves.reduce((total, leave) => {
-            return total + (leave.days_requested || 0);
+            return total + (parseFloat(leave.days_requested) || 0);
         }, 0);
         
         const leaveBalance = {
@@ -2857,75 +2975,97 @@ function handleGetLeaveBalance(req, res) {
             leave_start_year: employee.leave_start_year || currentYear
         };
         
-        console.log(`Leave balance calculated for ${buildEmployeeName(employee)}:`, leaveBalance);
-        
         res.writeHead(200);
         res.end(JSON.stringify({ 
             success: true, 
             data: leaveBalance 
         }));
-        
     } catch (error) {
-        console.error('Error calculating leave balance:', error);
+        console.error('❌ Error fetching leave balance:', error);
         res.writeHead(500);
-        res.end(JSON.stringify({ 
-            error: 'Failed to calculate leave balance',
-            message: error.message 
-        }));
+        res.end(JSON.stringify({ error: 'Failed to fetch leave balance' }));
     }
 }
 
 // Function to send notifications for new leave requests
-function sendLeaveRequestNotifications(leaveRequest, employee) {
+async function sendLeaveRequestNotifications(leaveRequest, employee) {
     try {
-        console.log(`🔍 Looking for managers and admins in users object...`);
-        console.log(`Total users: ${Object.keys(users).length}`);
+        console.log(`🔍 Looking for managers and admins...`);
         
-        // Find all managers and admins
-        const managersAndAdmins = Object.entries(users).filter(([email, user]) => {
-            console.log(`User ${email}: role = ${user.role}`);
-            return user.role === 'manager' || user.role === 'admin';
-        });
+        if (USE_DATABASE) {
+            // In database mode, we need to get all users
+            // For now, use the file-based users as a fallback
+            // TODO: Add dbOps.getAllUsers() if needed
+            const managersAndAdmins = Object.entries(users).filter(([email, user]) => {
+                return user.role === 'manager' || user.role === 'admin';
+            });
 
-        console.log(`✅ Found ${managersAndAdmins.length} managers and admins for notifications:`, managersAndAdmins.map(([email]) => email));
-        
-        // Create notification for each manager and admin
-        managersAndAdmins.forEach(([email, user]) => {
-            const maxId = notifications.length > 0 ? Math.max(...notifications.map(n => n.id)) : 0;
-            const newId = maxId + 1;
+            console.log(`✅ Found ${managersAndAdmins.length} managers and admins for notifications`);
             
-            const notification = {
-                id: newId,
-                type: 'leave_request',
-                title: 'New Leave Request',
-                message: `${leaveRequest.employee_name} has submitted a new ${leaveRequest.leave_type} request for ${leaveRequest.days_requested} day(s) from ${leaveRequest.start_date} to ${leaveRequest.end_date}.`,
-                recipient_email: email,
-                sender_email: leaveRequest.created_by,
-                related_id: leaveRequest.id,
-                related_type: 'leave_request',
-                is_read: false,
-                is_viewed: false,
-                created_at: new Date().toISOString(),
-                priority: 'normal'
-            };
+            // Create notification for each manager and admin
+            for (const [email, user] of managersAndAdmins) {
+                const notificationData = {
+                    type: 'leave_request',
+                    title: 'New Leave Request',
+                    message: `${leaveRequest.employee_name} has submitted a new ${leaveRequest.leave_type} request for ${leaveRequest.days_requested} day(s) from ${leaveRequest.start_date} to ${leaveRequest.end_date}.`,
+                    recipient_email: email,
+                    sender_email: leaveRequest.created_by,
+                    related_id: leaveRequest.id,
+                    related_type: 'leave_request',
+                    priority: 'normal'
+                };
+                
+                const notificationId = await dbOps.createNotification(notificationData);
+                console.log(`✅ Leave request notification created (ID: ${notificationId}) for ${email}`);
+            }
+        } else {
+            // File-based mode
+            console.log(`Total users: ${Object.keys(users).length}`);
             
-            notifications.push(notification);
-            console.log(`✅ Leave request notification created (ID: ${newId}) for ${email}: ${notification.title}`);
-        });
-        
+            // Find all managers and admins
+            const managersAndAdmins = Object.entries(users).filter(([email, user]) => {
+                console.log(`User ${email}: role = ${user.role}`);
+                return user.role === 'manager' || user.role === 'admin';
+            });
+
+            console.log(`✅ Found ${managersAndAdmins.length} managers and admins for notifications:`, managersAndAdmins.map(([email]) => email));
+            
+            // Create notification for each manager and admin
+            managersAndAdmins.forEach(([email, user]) => {
+                const maxId = notifications.length > 0 ? Math.max(...notifications.map(n => n.id)) : 0;
+                const newId = maxId + 1;
+                
+                const notification = {
+                    id: newId,
+                    type: 'leave_request',
+                    title: 'New Leave Request',
+                    message: `${leaveRequest.employee_name} has submitted a new ${leaveRequest.leave_type} request for ${leaveRequest.days_requested} day(s) from ${leaveRequest.start_date} to ${leaveRequest.end_date}.`,
+                    recipient_email: email,
+                    sender_email: leaveRequest.created_by,
+                    related_id: leaveRequest.id,
+                    related_type: 'leave_request',
+                    is_read: false,
+                    is_viewed: false,
+                    created_at: new Date().toISOString(),
+                    priority: 'normal'
+                };
+                
+                notifications.push(notification);
+                console.log(`✅ Leave request notification created (ID: ${newId}) for ${email}: ${notification.title}`);
+            });
+        }
     } catch (error) {
         console.error('Error sending leave request notifications:', error);
     }
 }
 
 // Function to send notifications when leave request status changes
-function sendLeaveStatusNotification(leaveRequest, approverEmail, newStatus) {
+async function sendLeaveStatusNotification(leaveRequest, approverEmail, newStatus) {
     try {
         // Find the employee who made the request
-        const employee = employees.find(emp => emp.id === leaveRequest.employee_id);
+        const allEmployees = await dbOps.getAllEmployees();
+        const employee = allEmployees.find(emp => emp.id === leaveRequest.employee_id);
         if (!employee) return;
-
-        const maxId = notifications.length > 0 ? Math.max(...notifications.map(n => n.id)) : 0;
         
         let title, message;
         if (newStatus === 'approved') {
@@ -2941,8 +3081,7 @@ function sendLeaveStatusNotification(leaveRequest, approverEmail, newStatus) {
             return; // Don't send notification for other status changes
         }
         
-        const notification = {
-            id: maxId + 1,
+        const notificationData = {
             type: 'leave_status',
             title: title,
             message: message,
@@ -2950,13 +3089,10 @@ function sendLeaveStatusNotification(leaveRequest, approverEmail, newStatus) {
             sender_email: approverEmail,
             related_id: leaveRequest.id,
             related_type: 'leave_request',
-            is_read: false,
-            is_viewed: false,
-            created_at: new Date().toISOString(),
             priority: newStatus === 'rejected' ? 'high' : 'normal'
         };
         
-        notifications.push(notification);
+        await dbOps.createNotification(notificationData);
         console.log(`Leave status notification sent to ${employee.email}: ${title}`);
         
     } catch (error) {
@@ -2999,7 +3135,7 @@ async function handleGetNotifications(req, res) {
     }
 }
 
-function handleSendNotification(req, res, data) {
+async function handleSendNotification(req, res, data) {
     const session = getSession(req);
     
     if (!session) {
@@ -3019,109 +3155,176 @@ function handleSendNotification(req, res, data) {
         return;
     }
     
-    // Create notification
-    const maxId = notifications.length > 0 ? Math.max(...notifications.map(n => n.id)) : 0;
-    const notification = {
-        id: maxId + 1,
-        type: type,
-        title: title,
-        message: message,
-        sender_email: session.email,
-        sender_name: getSenderName(session.email),
-        recipient_email: recipient_email,
-        violation_data: violation_data || null,
-        is_read: false,
-        is_viewed: false,
-        created_at: new Date().toISOString(),
-        read_at: null,
-        viewed_at: null
-    };
-    
-    notifications.push(notification);
-    
-    // Save data
-    saveData();
-    
-    console.log(`Notification sent from ${session.email} to ${recipient_email}: ${title}`);
-    
-    res.writeHead(200);
-    res.end(JSON.stringify({ 
-        success: true, 
-        data: notification,
-        message: 'Notification sent successfully'
-    }));
-}
-
-function handleMarkNotificationRead(req, res, pathname) {
-    const session = getSession(req);
-    
-    if (!session) {
-        res.writeHead(401);
-        res.end(JSON.stringify({ error: 'Not authenticated' }));
-        return;
-    }
-    
-    const notificationId = parseInt(pathname.split('/').pop());
-    const notificationIndex = notifications.findIndex(n => 
-        n.id === notificationId && n.recipient_email === session.email
-    );
-    
-    if (notificationIndex === -1) {
-        res.writeHead(404);
-        res.end(JSON.stringify({ error: 'Notification not found' }));
-        return;
-    }
-    
-    // Mark as read
-    notifications[notificationIndex].is_read = true;
-    notifications[notificationIndex].read_at = new Date().toISOString();
-    
-    // Save data
-    saveData();
-    
-    res.writeHead(200);
-    res.end(JSON.stringify({ 
-        success: true, 
-        data: notifications[notificationIndex]
-    }));
-}
-
-function handleMarkNotificationsViewed(req, res) {
-    const session = getSession(req);
-    
-    if (!session) {
-        res.writeHead(401);
-        res.end(JSON.stringify({ error: 'Not authenticated' }));
-        return;
-    }
-    
-    // Mark all unviewed notifications for this user as viewed
-    let viewedCount = 0;
-    notifications.forEach(notification => {
-        if (notification.recipient_email === session.email && !notification.is_viewed) {
-            notification.is_viewed = true;
-            notification.viewed_at = new Date().toISOString();
-            viewedCount++;
+    try {
+        const senderName = await getSenderName(session.email);
+        
+        if (USE_DATABASE) {
+            // Add to database
+            const notificationData = {
+                type: type,
+                title: title,
+                message: message,
+                recipient_email: recipient_email,
+                sender_email: session.email,
+                related_id: violation_data?.id || null,
+                related_type: violation_data ? 'violation' : null,
+                priority: 'normal'
+            };
+            
+            const notificationId = await dbOps.createNotification(notificationData);
+            
+            const notification = {
+                id: notificationId,
+                ...notificationData,
+                sender_name: senderName,
+                violation_data: violation_data || null,
+                is_read: false,
+                is_viewed: false,
+                created_at: new Date().toISOString(),
+                read_at: null,
+                viewed_at: null
+            };
+            
+            console.log(`Notification sent from ${session.email} to ${recipient_email}: ${title}`);
+            
+            res.writeHead(200);
+            res.end(JSON.stringify({ 
+                success: true, 
+                data: notification,
+                message: 'Notification sent successfully'
+            }));
+        } else {
+            // Fallback to file-based operations
+            const maxId = notifications.length > 0 ? Math.max(...notifications.map(n => n.id)) : 0;
+            const notification = {
+                id: maxId + 1,
+                type: type,
+                title: title,
+                message: message,
+                sender_email: session.email,
+                sender_name: senderName,
+                recipient_email: recipient_email,
+                violation_data: violation_data || null,
+                is_read: false,
+                is_viewed: false,
+                created_at: new Date().toISOString(),
+                read_at: null,
+                viewed_at: null
+            };
+            
+            notifications.push(notification);
+            
+            // Save data
+            saveData();
+            
+            console.log(`Notification sent from ${session.email} to ${recipient_email}: ${title}`);
+            
+            res.writeHead(200);
+            res.end(JSON.stringify({ 
+                success: true, 
+                data: notification,
+                message: 'Notification sent successfully'
+            }));
         }
-    });
-    
-    // Save data
-    saveData();
-    
-    console.log(`Marked ${viewedCount} notifications as viewed for ${session.email}`);
-    
-    res.writeHead(200);
-    res.end(JSON.stringify({ 
-        success: true, 
-        viewed_count: viewedCount,
-        message: `${viewedCount} notifications marked as viewed`
-    }));
+    } catch (error) {
+        console.error('❌ Error sending notification:', error);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to send notification' }));
+    }
 }
 
-function getSenderName(email) {
-    const employee = employees.find(emp => emp.email === email);
-    if (employee) {
-        return buildEmployeeName(employee);
+async function handleMarkNotificationRead(req, res, pathname) {
+    const session = getSession(req);
+    
+    if (!session) {
+        res.writeHead(401);
+        res.end(JSON.stringify({ error: 'Not authenticated' }));
+        return;
+    }
+    
+    try {
+        const notificationId = parseInt(pathname.split('/').pop());
+        
+        // Update in database
+        const success = await dbOps.markNotificationRead(notificationId);
+        
+        if (!success) {
+            res.writeHead(404);
+            res.end(JSON.stringify({ error: 'Notification not found' }));
+            return;
+        }
+        
+        // Fetch all user notifications to get the updated one
+        const userNotifications = await dbOps.getNotifications(session.email);
+        const notification = userNotifications.find(n => n.id === notificationId);
+        
+        res.writeHead(200);
+        res.end(JSON.stringify({ 
+            success: true, 
+            data: notification
+        }));
+    } catch (error) {
+        console.error('❌ Error marking notification as read:', error);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to mark notification as read' }));
+    }
+}
+
+async function handleMarkNotificationsViewed(req, res) {
+    const session = getSession(req);
+    
+    if (!session) {
+        res.writeHead(401);
+        res.end(JSON.stringify({ error: 'Not authenticated' }));
+        return;
+    }
+    
+    try {
+        // Mark all unviewed notifications for this user as viewed
+        let viewedCount = 0;
+        
+        if (USE_DATABASE) {
+            viewedCount = await dbOps.markNotificationsViewed(session.email);
+        } else {
+            notifications.forEach(notification => {
+                if (notification.recipient_email === session.email && !notification.is_viewed) {
+                    notification.is_viewed = true;
+                    notification.viewed_at = new Date().toISOString();
+                    viewedCount++;
+                }
+            });
+            
+            // Save data
+            saveData();
+        }
+        
+        console.log(`Marked ${viewedCount} notifications as viewed for ${session.email}`);
+        
+        res.writeHead(200);
+        res.end(JSON.stringify({ 
+            success: true, 
+            viewed_count: viewedCount,
+            message: `${viewedCount} notifications marked as viewed`
+        }));
+    } catch (error) {
+        console.error('❌ Error marking notifications as viewed:', error);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to mark notifications as viewed' }));
+    }
+}
+
+async function getSenderName(email) {
+    if (USE_DATABASE) {
+        const allEmployees = await dbOps.getAllEmployees();
+        const employee = allEmployees.find(emp => emp.email === email);
+        if (employee) {
+            return buildEmployeeName(employee);
+        }
+    } else {
+        const employee = employees.find(emp => emp.email === email);
+        if (employee) {
+            return buildEmployeeName(employee);
+        }
     }
     return email;
 }
@@ -3214,7 +3417,7 @@ function handleUpdateConfig(req, res, data) {
     }
 }
 
-function handleBackupDownload(req, res) {
+async function handleBackupDownload(req, res) {
     const session = getSession(req);
     
     // Only admin can download backups
@@ -3227,25 +3430,33 @@ function handleBackupDownload(req, res) {
     }
     
     try {
+        // Get data from database or file
+        const allEmployees = USE_DATABASE ? await dbOps.getAllEmployees() : employees;
+        const allDepartments = USE_DATABASE ? await dbOps.getDepartments() : departments;
+        const allLeaveRequests = USE_DATABASE ? await dbOps.getLeaveRequests({}) : leaveRequests;
+        const allAttendanceRecords = USE_DATABASE ? await dbOps.getAttendanceHistory({}) : attendanceRecords;
+        const allNotifications = USE_DATABASE ? [] : (notifications || []); // Notifications from file only
+        
         // Create comprehensive backup data
         const backupData = {
             metadata: {
                 backup_date: new Date().toISOString(),
                 backup_by: session.email,
                 system_version: '1.0.0',
-                total_employees: employees.length,
-                total_users: Object.keys(users).length,
-                total_departments: departments.length,
-                total_leave_requests: leaveRequests.length,
-                total_attendance_records: attendanceRecords.length
+                total_employees: allEmployees.length,
+                total_users: USE_DATABASE ? 0 : Object.keys(users).length,
+                total_departments: allDepartments.length,
+                total_leave_requests: allLeaveRequests.length,
+                total_attendance_records: allAttendanceRecords.length,
+                data_source: USE_DATABASE ? 'MySQL Database' : 'JSON File'
             },
-            employees: employees,
-            users: users,
-            departments: departments,
-            leaveRequests: leaveRequests,
-            attendanceRecords: attendanceRecords,
+            employees: allEmployees,
+            users: USE_DATABASE ? {} : users,
+            departments: allDepartments,
+            leaveRequests: allLeaveRequests,
+            attendanceRecords: allAttendanceRecords,
             attendancePolicy: global.attendancePolicy,
-            notifications: notifications || []
+            notifications: allNotifications
         };
         
         // Generate filename with timestamp
@@ -3265,7 +3476,7 @@ function handleBackupDownload(req, res) {
         res.end(JSON.stringify(backupData, null, 2));
         
     } catch (error) {
-        console.error('Backup download error:', error);
+        console.error('❌ Backup download error:', error);
         res.writeHead(500);
         res.end(JSON.stringify({ 
             error: 'Failed to create backup',
@@ -3274,7 +3485,7 @@ function handleBackupDownload(req, res) {
     }
 }
 
-function handleBackupDownloadExcel(req, res) {
+async function handleBackupDownloadExcel(req, res) {
     const session = getSession(req);
     
     // Only admin can download backups
@@ -3287,6 +3498,12 @@ function handleBackupDownloadExcel(req, res) {
     }
     
     try {
+        // Get data from database or file
+        const allEmployees = USE_DATABASE ? await dbOps.getAllEmployees() : employees;
+        const allDepartments = USE_DATABASE ? await dbOps.getDepartments() : departments;
+        const allLeaveRequests = USE_DATABASE ? await dbOps.getLeaveRequests({}) : leaveRequests;
+        const allAttendanceRecords = USE_DATABASE ? await dbOps.getAttendanceHistory({}) : attendanceRecords;
+        
         // Create Excel-style CSV data for each table
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0] + '_' + 
                          new Date().toTimeString().split(' ')[0].replace(/:/g, '-');
@@ -3326,42 +3543,45 @@ function handleBackupDownloadExcel(req, res) {
         excelContent += `Backup Date,${new Date().toISOString()}\n`;
         excelContent += `Backup By,${session.email}\n`;
         excelContent += `System Version,1.0.0\n`;
-        excelContent += `Total Employees,${employees.length}\n`;
-        excelContent += `Total Users,${Object.keys(users).length}\n`;
-        excelContent += `Total Departments,${departments.length}\n`;
-        excelContent += `Total Leave Requests,${leaveRequests.length}\n`;
-        excelContent += `Total Attendance Records,${attendanceRecords.length}\n\n`;
+        excelContent += `Total Employees,${allEmployees.length}\n`;
+        excelContent += `Total Users,${USE_DATABASE ? 0 : Object.keys(users).length}\n`;
+        excelContent += `Total Departments,${allDepartments.length}\n`;
+        excelContent += `Total Leave Requests,${allLeaveRequests.length}\n`;
+        excelContent += `Total Attendance Records,${allAttendanceRecords.length}\n`;
+        excelContent += `Data Source,${USE_DATABASE ? 'MySQL Database' : 'JSON File'}\n\n`;
         
         // Employees Sheet
         excelContent += '=== EMPLOYEES ===\n';
         const employeeHeaders = ['id', 'employee_id', 'first_name', 'father_name', 'gfather_name', 'email', 'department', 'job_title', 'salary', 'start_date', 'status', 'annual_leave_days'];
-        excelContent += arrayToCSV(employees, employeeHeaders) + '\n\n';
+        excelContent += arrayToCSV(allEmployees, employeeHeaders) + '\n\n';
         
-        // Users Sheet
-        excelContent += '=== USERS ===\n';
-        const usersArray = Object.entries(users).map(([email, userData]) => ({
-            email: email,
-            id: userData.id,
-            role: userData.role,
-            password: '***HIDDEN***' // Don't export actual passwords
-        }));
-        const userHeaders = ['email', 'id', 'role', 'password'];
-        excelContent += arrayToCSV(usersArray, userHeaders) + '\n\n';
+        // Users Sheet (file-based only)
+        if (!USE_DATABASE) {
+            excelContent += '=== USERS ===\n';
+            const usersArray = Object.entries(users).map(([email, userData]) => ({
+                email: email,
+                id: userData.id,
+                role: userData.role,
+                password: '***HIDDEN***' // Don't export actual passwords
+            }));
+            const userHeaders = ['email', 'id', 'role', 'password'];
+            excelContent += arrayToCSV(usersArray, userHeaders) + '\n\n';
+        }
         
         // Departments Sheet
         excelContent += '=== DEPARTMENTS ===\n';
         const departmentHeaders = ['id', 'name', 'description'];
-        excelContent += arrayToCSV(departments, departmentHeaders) + '\n\n';
+        excelContent += arrayToCSV(allDepartments, departmentHeaders) + '\n\n';
         
         // Leave Requests Sheet
         excelContent += '=== LEAVE REQUESTS ===\n';
         const leaveHeaders = ['id', 'employee_id', 'employee_name', 'leave_type', 'start_date', 'end_date', 'days_requested', 'reason', 'status', 'created_at'];
-        excelContent += arrayToCSV(leaveRequests, leaveHeaders) + '\n\n';
+        excelContent += arrayToCSV(allLeaveRequests, leaveHeaders) + '\n\n';
         
         // Attendance Records Sheet
         excelContent += '=== ATTENDANCE RECORDS ===\n';
         const attendanceHeaders = ['id', 'employee_id', 'employee_name', 'date', 'morning_checkin', 'morning_checkout', 'afternoon_checkin', 'afternoon_checkout', 'total_hours', 'status'];
-        excelContent += arrayToCSV(attendanceRecords, attendanceHeaders) + '\n\n';
+        excelContent += arrayToCSV(allAttendanceRecords, attendanceHeaders) + '\n\n';
         
         // Attendance Policy Sheet
         excelContent += '=== ATTENDANCE POLICY ===\n';
@@ -3388,7 +3608,7 @@ function handleBackupDownloadExcel(req, res) {
         res.end(bom + excelContent);
         
     } catch (error) {
-        console.error('Excel backup download error:', error);
+        console.error('❌ Excel backup download error:', error);
         res.writeHead(500);
         res.end(JSON.stringify({ 
             error: 'Failed to create Excel backup',
