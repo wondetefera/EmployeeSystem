@@ -584,6 +584,7 @@ function validateAttendanceTime(action, type, currentTime, dayOfWeek) {
 
 async function handleAttendance(req, res, data) {
     console.log('🔍 DEBUG: handleAttendance called with:', { action: data.action, type: data.type });
+    console.log(`🔍 USE_DATABASE: ${USE_DATABASE}`);
     
     const session = getSession(req);
     
@@ -600,9 +601,16 @@ async function handleAttendance(req, res, data) {
         const currentDate = now.toISOString().split('T')[0];
         const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
         
-        // Get employee from database
-        const allEmployees = await dbOps.getAllEmployees();
-        const employee = allEmployees.find(emp => emp.email === session.email);
+        // Get employee - database or file-based
+        let allEmployees, employee;
+        if (USE_DATABASE) {
+            allEmployees = await dbOps.getAllEmployees();
+            employee = allEmployees.find(emp => emp.email === session.email);
+        } else {
+            const fileData = loadDataFromFile();
+            allEmployees = fileData.employees || [];
+            employee = allEmployees.find(emp => emp.email === session.email);
+        }
             
         if (!employee) {
             res.writeHead(404);
@@ -622,10 +630,19 @@ async function handleAttendance(req, res, data) {
         }
         
         // Find or create today's attendance record
-        let todayRecord = await dbOps.getTodayAttendance(employee.id);
+        let todayRecord;
+        let fileData;
+        
+        if (USE_DATABASE) {
+            todayRecord = await dbOps.getTodayAttendance(employee.id);
+        } else {
+            fileData = loadDataFromFile();
+            if (!fileData.attendance) fileData.attendance = [];
+            todayRecord = fileData.attendance.find(rec => rec.employee_id === employee.id && rec.date === currentDate);
+        }
         
         if (!todayRecord) {
-            // Create new record (database will handle this in recordAttendance)
+            // Create new record
             todayRecord = {
                 employee_id: employee.id,
                 employee_name: buildEmployeeName(employee),
@@ -638,6 +655,10 @@ async function handleAttendance(req, res, data) {
                 status: 'present',
                 created_at: new Date().toISOString()
             };
+            
+            if (!USE_DATABASE) {
+                fileData.attendance.push(todayRecord);
+            }
         }
         
         // Update the appropriate field
@@ -694,9 +715,13 @@ async function handleAttendance(req, res, data) {
         // Calculate total hours if both morning and afternoon sessions are complete
         todayRecord.total_hours = calculateTotalHours(todayRecord);
         
-        // Save to database
-        const employee_name = buildEmployeeName(employee);
-        await dbOps.recordAttendance(employee.id, employee_name, type, action, currentTime);
+        // Save - database or file
+        if (USE_DATABASE) {
+            const employee_name = buildEmployeeName(employee);
+            await dbOps.recordAttendance(employee.id, employee_name, type, action, currentTime);
+        } else {
+            saveDataToFile(fileData);
+        }
         
         console.log(`${employee_name} - ${action} ${type} at ${currentTime}`);
         
@@ -769,10 +794,15 @@ async function handleTodayAttendance(req, res) {
     try {
         const currentDate = new Date().toISOString().split('T')[0];
         
-        // Get employee from database or file
-        const employee = USE_DATABASE
-            ? (await dbOps.getAllEmployees()).find(emp => emp.email === session.email)
-            : employees.find(emp => emp.email === session.email);
+        // Get employee - database or file-based
+        let employee;
+        if (USE_DATABASE) {
+            const allEmployees = await dbOps.getAllEmployees();
+            employee = allEmployees.find(emp => emp.email === session.email);
+        } else {
+            const fileData = loadDataFromFile();
+            employee = (fileData.employees || []).find(emp => emp.email === session.email);
+        }
         
         if (!employee) {
             res.writeHead(404);
@@ -781,11 +811,15 @@ async function handleTodayAttendance(req, res) {
         }
         
         // Find today's attendance record
-        const todayRecord = USE_DATABASE
-            ? await dbOps.getTodayAttendance(employee.id, currentDate)
-            : attendanceRecords.find(record => 
+        let todayRecord;
+        if (USE_DATABASE) {
+            todayRecord = await dbOps.getTodayAttendance(employee.id, currentDate);
+        } else {
+            const fileData = loadDataFromFile();
+            todayRecord = (fileData.attendance || []).find(record => 
                 record.employee_id === employee.id && record.date === currentDate
             );
+        }
         
         res.writeHead(200);
         res.end(JSON.stringify({ 
