@@ -1932,8 +1932,21 @@ async function handleAddEmployee(req, res, data) {
     }
 
     try {
+        let allEmployees, existingUser;
+        let fileData = null;
+        
+        if (USE_DATABASE) {
+            // Use database
+            allEmployees = await dbOps.getAllEmployees();
+            existingUser = await dbOps.getUserByEmail(data.email.trim().toLowerCase());
+        } else {
+            // Use file-based storage
+            fileData = loadDataFromFile();
+            allEmployees = fileData.employees || [];
+            existingUser = fileData.users[data.email.trim().toLowerCase()];
+        }
+        
         // Check if email already exists
-        const existingUser = await dbOps.getUserByEmail(data.email.trim().toLowerCase());
         if (existingUser) {
             res.writeHead(400);
             res.end(JSON.stringify({ error: 'Email address already exists' }));
@@ -1941,7 +1954,6 @@ async function handleAddEmployee(req, res, data) {
         }
 
         // Generate new employee ID
-        const allEmployees = await dbOps.getAllEmployees();
         const maxId = allEmployees.reduce((max, emp) => Math.max(max, emp.id), 0);
         
         const currentYear = new Date().getFullYear();
@@ -1979,11 +1991,22 @@ async function handleAddEmployee(req, res, data) {
             password: tempPassword
         };
 
-        // Use database transaction to insert both employee and user
-        await dbOps.addEmployee(newEmployee, userData);
+        // Save employee and user credentials
+        if (USE_DATABASE) {
+            // Use database transaction to insert both employee and user
+            await dbOps.addEmployee(newEmployee, userData);
+        } else {
+            // Use file-based storage
+            if (!fileData.employees) fileData.employees = [];
+            if (!fileData.users) fileData.users = {};
+            
+            fileData.employees.push(newEmployee);
+            fileData.users[userData.email] = userData;
+            saveDataToFile(fileData);
+        }
         
-        console.log(`New ${assignedRole} added: ${buildEmployeeName(newEmployee)}`);
-        console.log(`Login credentials created - Email: ${data.email}, Password: ${tempPassword}, Role: ${assignedRole}`);
+        console.log(`✅ New ${assignedRole} added: ${newEmployee.first_name} ${newEmployee.father_name || ''}`);
+        console.log(`   Login credentials - Email: ${data.email}, Password: ${tempPassword}, Role: ${assignedRole}`);
 
         res.writeHead(200);
         res.end(JSON.stringify({ 

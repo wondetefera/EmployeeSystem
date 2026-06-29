@@ -1,6 +1,6 @@
 {
   "server": {
-    "host": "0.0.0.0",
+    "host": "10.192.230.251",
     "port": 8080,
     "allowExternalConnections": true
   }
