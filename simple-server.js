@@ -21,6 +21,30 @@ const dbOps = require('./db/operations');
 // FORCED TO FALSE until database connectivity is fixed
 const USE_DATABASE = false; // Temporarily disabled - database connection failing with ENOTFOUND
 
+// Helper function to load data from data.json
+function loadDataFromFile() {
+    try {
+        if (fs.existsSync('data.json')) {
+            return JSON.parse(fs.readFileSync('data.json', 'utf8'));
+        }
+        return { users: {}, employees: [], departments: [], leaveRequests: [], attendance: [], notifications: [] };
+    } catch (error) {
+        console.error('Error loading data.json:', error);
+        return { users: {}, employees: [], departments: [], leaveRequests: [], attendance: [], notifications: [] };
+    }
+}
+
+// Helper function to save data to data.json
+function saveDataToFile(data) {
+    try {
+        fs.writeFileSync('data.json', JSON.stringify(data, null, 2));
+        return true;
+    } catch (error) {
+        console.error('Error saving data.json:', error);
+        return false;
+    }
+}
+
 // Load configuration
 let config = {};
 try {
@@ -407,12 +431,20 @@ async function handleLogin(req, res, data) {
     const { email, password } = data;
     
     console.log(`🔐 Login attempt: ${email} from ${req.connection.remoteAddress}`);
+    console.log(`🔍 USE_DATABASE: ${USE_DATABASE}`);
     
     try {
-        // Query database for user by email using parameterized SELECT query
-        const user = USE_DATABASE 
-            ? await dbOps.getUserByEmail(email)
-            : users[email]; // Fallback to file-based for local dev
+        let user;
+        
+        if (USE_DATABASE) {
+            // Use database
+            user = await dbOps.getUserByEmail(email);
+        } else {
+            // Use file-based storage
+            const fileData = loadDataFromFile();
+            user = fileData.users[email];
+            console.log(`📄 File-based auth - Found user: ${!!user}`);
+        }
         
         if (user && user.password === password) {
             const sessionData = {
@@ -427,14 +459,14 @@ async function handleLogin(req, res, data) {
             res.writeHead(200);
             res.end(JSON.stringify({ success: true, redirect: '/dashboard' }));
         } else {
-            console.log(`❌ Login failed for ${email}`);
+            console.log(`❌ Login failed for ${email} - user found: ${!!user}, password match: ${user && user.password === password}`);
             res.writeHead(200);
             res.end(JSON.stringify({ success: false, message: 'Invalid credentials' }));
         }
     } catch (error) {
-        console.error('❌ Database error during login:', error);
+        console.error('❌ Error during login:', error);
         res.writeHead(500);
-        res.end(JSON.stringify({ error: 'Database error during authentication' }));
+        res.end(JSON.stringify({ error: 'Authentication error' }));
     }
 }
 
