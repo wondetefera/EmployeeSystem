@@ -266,6 +266,8 @@
             }
 
             try {
+                console.log(`🔐 Starting password reset for: ${email}`);
+                
                 const response = await fetchApi('/api/reset-password', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -275,16 +277,24 @@
                     })
                 });
 
+                console.log(`📡 Reset password response status: ${response.status}`);
+                console.log(`📡 Response headers:`, response.headers);
+                
                 const result = await response.json();
+                console.log(`📡 Reset password result:`, result);
 
                 if (result.success) {
+                    console.log(`✅ Reset successful, showing alert`);
                     showPasswordResetAlert(result.newPassword, firstName, lastName, email);
                 } else {
+                    console.log(`❌ Reset failed:`, result.error);
                     showAlert('danger', result.error || 'Failed to reset password');
                 }
             } catch (error) {
-                console.error('Error resetting password:', error);
-                showAlert('danger', 'An error occurred while resetting the password');
+                console.error('❌ Error resetting password:', error);
+                console.error('   Error message:', error.message);
+                console.error('   Error stack:', error.stack);
+                showAlert('danger', 'An error occurred while resetting the password: ' + error.message);
             }
         }
 

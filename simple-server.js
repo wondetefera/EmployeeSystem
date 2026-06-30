@@ -2843,8 +2843,26 @@ async function handleResetPassword(req, res, data) {
     }
 
     try {
+        // Check if dbOps is available
+        if (!dbOps) {
+            res.writeHead(503);
+            res.end(JSON.stringify({ error: 'Database operations not available' }));
+            return;
+        }
+
         // Check if target user exists
-        const targetUser = await dbOps.getUserByEmail(targetEmail);
+        let targetUser;
+        if (USE_DATABASE) {
+            targetUser = await dbOps.getUserByEmail(targetEmail);
+        } else {
+            // File-based storage fallback
+            const fileData = loadDataFromFile();
+            targetUser = fileData.users[targetEmail];
+            if (targetUser) {
+                // Convert to match database format
+                targetUser.role = targetUser.role || 'employee';
+            }
+        }
         
         if (!targetUser) {
             res.writeHead(404);
@@ -2875,11 +2893,22 @@ async function handleResetPassword(req, res, data) {
         
         // Update password
         try {
-            await dbOps.updateUserPassword(targetEmail, finalPassword);
+            if (USE_DATABASE) {
+                await dbOps.updateUserPassword(targetEmail, finalPassword);
+            } else {
+                // File-based storage fallback
+                const fileData = loadDataFromFile();
+                if (fileData.users[targetEmail]) {
+                    fileData.users[targetEmail].password = finalPassword;
+                    saveDataToFile(fileData);
+                } else {
+                    throw new Error('User not found in file storage');
+                }
+            }
         } catch (updateError) {
             console.error(`❌ Failed to update password for ${targetEmail}:`, updateError);
             res.writeHead(500);
-            res.end(JSON.stringify({ error: 'Failed to update password in database' }));
+            res.end(JSON.stringify({ error: 'Failed to update password: ' + updateError.message }));
             return;
         }
         
