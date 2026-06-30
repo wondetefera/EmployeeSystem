@@ -2874,7 +2874,14 @@ async function handleResetPassword(req, res, data) {
         const finalPassword = '123456';
         
         // Update password
-        await dbOps.updateUserPassword(targetEmail, finalPassword);
+        try {
+            await dbOps.updateUserPassword(targetEmail, finalPassword);
+        } catch (updateError) {
+            console.error(`❌ Failed to update password for ${targetEmail}:`, updateError);
+            res.writeHead(500);
+            res.end(JSON.stringify({ error: 'Failed to update password in database' }));
+            return;
+        }
         
         console.log(`Password reset by ${session.email} for user: ${targetEmail}`);
 
