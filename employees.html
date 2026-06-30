@@ -117,8 +117,6 @@
 
         // ============ PASSWORD RESET FUNCTIONS ============
         async function resetPassword(email, fullName) {
-            alert(`🔐 Password Reset Started\n\nEmployee: ${fullName}\nEmail: ${email}`);
-            
             const confirmMessage = `Are you sure you want to reset the password for ${fullName}?\n\nThis will generate a new temporary password.`;
             
             if (!confirm(confirmMessage)) {
@@ -126,7 +124,6 @@
             }
 
             try {
-                alert(`⏳ Processing password reset...`);
                 console.log(`🔐 Starting password reset for: ${email}`);
                 
                 // Use plain fetch to avoid initialization issues
@@ -141,37 +138,32 @@
                 });
 
                 console.log(`📡 Reset password response status: ${response.status}`);
-                alert(`📡 API Response Status: ${response.status}`);
                 
                 // Read response as text first to debug
                 const responseText = await response.text();
                 console.log(`📡 Reset password response text:`, responseText);
-                alert(`📡 Response:\n${responseText.substring(0, 200)}`);
                 
                 let result;
                 try {
                     result = JSON.parse(responseText);
                 } catch (e) {
                     console.error(`❌ Failed to parse JSON response:`, responseText);
-                    alert(`❌ Parse Error: ${e.message}\n\nResponse: ${responseText}`);
+                    showAlert('danger', 'Invalid response from server');
                     return;
                 }
                 
                 console.log(`📡 Reset password result:`, result);
-                alert(`Result: ${JSON.stringify(result)}`);
 
                 if (result.success) {
                     console.log(`✅ Reset successful, showing modal dialog`);
-                    alert(`✅ Password Reset Successful!\n\nNew Password: ${result.newPassword}`);
                     showPasswordResetAlert(result.newPassword, fullName, fullName, email);
                 } else {
                     console.log(`❌ Reset failed:`, result.error);
-                    alert(`❌ Reset Failed:\n${result.error || 'Unknown error'}`);
                     showAlert('danger', result.error || 'Failed to reset password');
                 }
             } catch (error) {
                 console.error('❌ Error resetting password:', error);
-                alert(`❌ Exception:\n${error.message}`);
+                console.error('   Error message:', error.message);
                 showAlert('danger', 'An error occurred while resetting the password: ' + error.message);
             }
         }
