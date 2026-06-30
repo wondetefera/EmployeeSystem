@@ -19,8 +19,26 @@ try {
 
 // Initialize database connection
 const { initializeDatabase, categorizeError, getPool } = require('./db/connection');
-const { createTables } = require('./db/schema');
-const dbOps = require('./db/operations');
+
+let createTables;
+try {
+    createTables = require('./db/schema').createTables;
+} catch (e) {
+    console.log('⚠️  schema.js not found or error:', e.message);
+    createTables = async () => {}; // No-op function
+}
+
+let dbOps;
+try {
+    dbOps = require('./db/operations');
+} catch (e) {
+    console.error('⚠️  operations.js error:', e.message);
+    // Fallback: provide dummy operations
+    dbOps = {
+        getUserByEmail: async () => null,
+        updateUserPassword: async () => false
+    };
+}
 
 // Optional modules - wrap in try-catch to handle missing files
 let employeeOps, analyticsRepo, emailScheduler;
