@@ -268,13 +268,15 @@
             try {
                 console.log(`🔐 Starting password reset for: ${email}`);
                 
-                const response = await fetchApi('/api/reset-password', {
+                // Use plain fetch to avoid initialization issues
+                const response = await fetch('/api/reset-password', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         targetEmail: email,
                         newPassword: '123456'
-                    })
+                    }),
+                    credentials: 'include'  // Include cookies for session
                 });
 
                 console.log(`📡 Reset password response status: ${response.status}`);
@@ -288,7 +290,7 @@
                     result = JSON.parse(responseText);
                 } catch (e) {
                     console.error(`❌ Failed to parse JSON response:`, responseText);
-                    showAlert('danger', 'Invalid response from server: ' + responseText);
+                    showAlert('danger', 'Invalid response from server');
                     return;
                 }
                 
@@ -304,7 +306,6 @@
             } catch (error) {
                 console.error('❌ Error resetting password:', error);
                 console.error('   Error message:', error.message);
-                console.error('   Error stack:', error.stack);
                 showAlert('danger', 'An error occurred while resetting the password: ' + error.message);
             }
         }
