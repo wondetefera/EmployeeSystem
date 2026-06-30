@@ -2095,8 +2095,15 @@ async function handleGetEmployees(req, res) {
     }
 
     try {
-        // Get employees from database with parameterized SELECT query
-        const employeeData = await dbOps.getAllEmployees();
+        // Get employees from database or file
+        let employeeData;
+        if (USE_DATABASE) {
+            employeeData = await dbOps.getAllEmployees();
+        } else {
+            // File-based storage
+            const fileData = loadDataFromFile();
+            employeeData = fileData.employees || [];
+        }
 
         // Strict role-based filtering
         let filteredEmployees = employeeData;
