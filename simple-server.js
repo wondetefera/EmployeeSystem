@@ -2348,29 +2348,70 @@ async function handleAddDepartment(req, res, data) {
             return;
         }
         
+        let dbError = null;
         if (USE_DATABASE) {
-            // Add to database
-            const departmentId = await dbOps.addDepartment(data.name.trim(), data.description ? data.description.trim() : null);
-            
-            const newDepartment = {
-                id: departmentId,
+            try {
+                // Add to database
+                const departmentId = await dbOps.addDepartment(data.name.trim(), data.description ? data.description.trim() : null);
+                
+                const newDepartment = {
+                    id: departmentId,
+                    name: data.name.trim(),
+                    description: data.description ? data.description.trim() : '',
+                    created_at: new Date().toISOString(),
+                    created_by: session.email
+                };
+                
+                console.log(`New department added by ${session.email}: ${newDepartment.name}`);
+                
+                res.writeHead(200);
+                res.end(JSON.stringify({ 
+                    success: true, 
+                    data: newDepartment,
+                    message: 'Department added successfully'
+                }));
+                return;
+            } catch (error) {
+                console.error('❌ Database error adding department:', error);
+                // If database is unavailable, fall back to file-based storage
+                if (error.statusCode === 503 || error.errorCategory === 'CONNECTION_UNAVAILABLE') {
+                    console.log('Database unavailable - using file-based storage fallback');
+                    dbError = error;
+                    // Fall through to file-based mode
+                } else {
+                    throw error;
+                }
+            }
+        }
+        
+        // File-based storage mode (or fallback from database)
+        if (!USE_DATABASE || dbError) {
+            // Add to in-memory departments array
+            const newDept = {
+                id: departments.length + 1,
                 name: data.name.trim(),
                 description: data.description ? data.description.trim() : '',
                 created_at: new Date().toISOString(),
                 created_by: session.email
             };
             
-            console.log(`New department added by ${session.email}: ${newDepartment.name}`);
+            departments.push(newDept);
+            
+            // Try to save to data.json
+            try {
+                saveData();
+                console.log(`New department added (file-based) by ${session.email}: ${newDept.name}`);
+            } catch (saveError) {
+                console.error('Warning: Could not save to data.json:', saveError.message);
+                // Still return success even if save fails - data is in memory
+            }
             
             res.writeHead(200);
             res.end(JSON.stringify({ 
                 success: true, 
-                data: newDepartment,
-                message: 'Department added successfully'
+                data: newDept,
+                message: 'Department added successfully' + (USE_DATABASE && dbError ? ' (file-based fallback)' : '')
             }));
-        } else {
-            res.writeHead(500);
-            res.end(JSON.stringify({ error: 'Database mode required for this operation' }));
         }
     } catch (error) {
         console.error('❌ Error adding department:', error);
