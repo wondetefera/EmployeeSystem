@@ -1,13 +1,69 @@
 {
-  "employees": [],
+  "employees": [
+    {
+      "id": 1,
+      "employee_id": "EMP001",
+      "first_name": "John",
+      "father_name": "David",
+      "gfather_name": "Michael",
+      "last_name": "Smith",
+      "email": "admin@company.com",
+      "phone": "1234567890",
+      "department": "IT",
+      "job_title": "Admin",
+      "salary": "5000",
+      "start_date": "2020-01-01",
+      "status": "active"
+    },
+    {
+      "id": 2,
+      "employee_id": "EMP002",
+      "first_name": "Jane",
+      "father_name": "Robert",
+      "gfather_name": "William",
+      "last_name": "Johnson",
+      "email": "manager@company.com",
+      "phone": "0987654321",
+      "department": "HR",
+      "job_title": "Manager",
+      "salary": "4000",
+      "start_date": "2021-06-15",
+      "status": "active"
+    },
+    {
+      "id": 3,
+      "employee_id": "EMP003",
+      "first_name": "Bob",
+      "father_name": "James",
+      "gfather_name": "George",
+      "last_name": "Brown",
+      "email": "employee@company.com",
+      "phone": "5555555555",
+      "department": "Finance",
+      "job_title": "Employee",
+      "salary": "3000",
+      "start_date": "2022-03-20",
+      "status": "active"
+    }
+  ],
   "users": {
     "admin@company.com": {
+      "id": 1,
       "role": "admin",
-      "email": "admin@company.com"
+      "email": "admin@company.com",
+      "password": "admin123"
     },
-    "user@company.com": {
+    "manager@company.com": {
+      "id": 2,
+      "role": "manager",
+      "email": "manager@company.com",
+      "password": "manager123"
+    },
+    "employee@company.com": {
+      "id": 3,
       "role": "employee",
-      "email": "user@company.com"
+      "email": "employee@company.com",
+      "password": "employee123"
     }
   },
   "departments": [],
