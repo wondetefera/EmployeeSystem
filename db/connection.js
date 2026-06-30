@@ -13,7 +13,13 @@
  */
 
 const mysql = require('mysql2/promise');
+const dns = require('dns').promises;
+const net = require('net');
 require('dotenv').config();
+
+// Import diagnostic utilities and connection status tracking
+const diagnosticUtils = require('./diagnostic-utils');
+const connectionStatus = require('./connection-status');
 
 // Global connection pool instance
 let pool = null;
@@ -28,10 +34,160 @@ function sleep(ms) {
 }
 
 /**
+ * Validate database configuration
+ * Checks that all required environment variables are set and have valid values
+ * 
+ * @returns {Object} - Validation result: { isValid: boolean, errors: [], warnings: [] }
+ */
+function validateDatabaseConfiguration() {
+  const errors = [];
+  const warnings = [];
+  
+  // Check required fields
+  if (!process.env.DB_HOST || process.env.DB_HOST.trim() === '') {
+    errors.push('DB_HOST is not set or is empty');
+  }
+  
+  if (!process.env.DB_USER || process.env.DB_USER.trim() === '') {
+    errors.push('DB_USER is not set or is empty');
+  }
+  
+  if (!process.env.DB_NAME || process.env.DB_NAME.trim() === '') {
+    errors.push('DB_NAME is not set or is empty');
+  }
+  
+  // Validate port
+  const port = parseInt(process.env.DB_PORT || '3306');
+  if (isNaN(port) || port < 1 || port > 65535) {
+    errors.push(`DB_PORT must be numeric between 1-65535, got: ${process.env.DB_PORT}`);
+  }
+  
+  // Log configuration (with password masked)
+  console.log('📦 Database Configuration Validation:');
+  console.log(`   DB_HOST: ${process.env.DB_HOST || 'NOT SET'}`);
+  console.log(`   DB_PORT: ${process.env.DB_PORT || '3306'}`);
+  console.log(`   DB_NAME: ${process.env.DB_NAME || 'NOT SET'}`);
+  console.log(`   DB_USER: ${process.env.DB_USER || 'NOT SET'}`);
+  console.log(`   DB_PASSWORD: ${process.env.DB_PASSWORD ? '***' : 'NOT SET'}`);
+  console.log(`   DB_SSL: ${process.env.DB_SSL || 'false'}`);
+  
+  if (errors.length > 0) {
+    console.error('❌ Configuration validation failed:');
+    errors.forEach(err => console.error(`   - ${err}`));
+  }
+  
+  if (warnings.length > 0) {
+    console.warn('⚠️  Configuration warnings:');
+    warnings.forEach(warn => console.warn(`   - ${warn}`));
+  }
+  
+  return {
+    isValid: errors.length === 0,
+    errors: errors,
+    warnings: warnings
+  };
+}
+
+/**
+ * Test DNS resolution for a hostname
+ * Verifies that the database hostname can be resolved to an IP address
+ * 
+ * @param {string} hostname - Hostname to resolve
+ * @returns {Promise<Object>} - Result: { success: boolean, ipAddress: string|null, errorCode: string|null, errorMessage: string|null }
+ */
+async function testDnsResolution(hostname) {
+  if (!hostname) {
+    return {
+      success: false,
+      ipAddress: null,
+      errorCode: 'INVALID_HOSTNAME',
+      errorMessage: 'Hostname is empty or null'
+    };
+  }
+  
+  try {
+    const addresses = await dns.resolve4(hostname);
+    if (addresses && addresses.length > 0) {
+      console.log(`✓ DNS resolution successful: ${hostname} → ${addresses[0]}`);
+      return {
+        success: true,
+        ipAddress: addresses[0],
+        errorCode: null,
+        errorMessage: null
+      };
+    }
+  } catch (error) {
+    console.error(`❌ DNS resolution failed for hostname: ${hostname}`);
+    console.error(`   Error Code: ${error.code}`);
+    console.error(`   Error Message: ${error.message}`);
+    
+    return {
+      success: false,
+      ipAddress: null,
+      errorCode: error.code || 'UNKNOWN',
+      errorMessage: error.message || 'Unknown DNS error'
+    };
+  }
+}
+
+/**
+ * Test network connectivity to a host:port combination
+ * Attempts a quick TCP connection to verify network accessibility
+ * 
+ * @param {string} hostname - Hostname to reach
+ * @param {number} port - Port to connect to
+ * @returns {Promise<Object>} - Result: { reachable: boolean, error: string|null, responseTime: number|null }
+ */
+async function testNetworkConnectivity(hostname, port) {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    const timeout = 3000; // 3 second timeout
+    const startTime = Date.now();
+    
+    socket.setTimeout(timeout);
+    
+    socket.on('connect', () => {
+      const responseTime = Date.now() - startTime;
+      console.log(`✓ Network connectivity check successful: ${hostname}:${port} (${responseTime}ms)`);
+      socket.destroy();
+      resolve({
+        reachable: true,
+        error: null,
+        responseTime: responseTime
+      });
+    });
+    
+    socket.on('timeout', () => {
+      console.error(`❌ Network connectivity check timeout for ${hostname}:${port}`);
+      socket.destroy();
+      resolve({
+        reachable: false,
+        error: 'Connection timeout after 3 seconds',
+        responseTime: null
+      });
+    });
+    
+    socket.on('error', (error) => {
+      console.error(`❌ Network connectivity check failed for ${hostname}:${port}`);
+      console.error(`   Error: ${error.message}`);
+      resolve({
+        reachable: false,
+        error: error.message,
+        responseTime: null
+      });
+    });
+    
+    socket.connect(port, hostname);
+  });
+}
+
+
+/**
  * Initialize database connection pool with configuration
  * Implements retry logic: 3 attempts with 5-second intervals
+ * Includes comprehensive pre-validation and diagnostic logging
  * Environment-specific behavior:
- * - Production: Exit process on failure (allows container restart)
+ * - Production: Continue running on failure (allows graceful degradation)
  * - Development: Continue running, log error
  * 
  * @returns {Promise<boolean>} - True if connected successfully, false otherwise
@@ -47,7 +203,29 @@ async function initializeDatabase() {
   const maxRetries = 3;
   const retryDelayMs = 5000; // 5 seconds
   
+  // STEP 1: Validate configuration
+  console.log('\n🔍 Step 1: Validating Database Configuration...');
+  const validationResult = validateDatabaseConfiguration();
+  if (!validationResult.isValid) {
+    console.error('⚠️  Configuration validation found errors but will continue attempting connection');
+  }
+  
+  // STEP 2: Test DNS resolution
+  console.log('\n🔍 Step 2: Testing DNS Resolution...');
+  const dnsResult = await testDnsResolution(process.env.DB_HOST);
+  
+  // STEP 3: Test network connectivity if DNS succeeded
+  let networkCheckResult = null;
+  if (dnsResult.success) {
+    console.log('\n🔍 Step 3: Testing Network Connectivity...');
+    networkCheckResult = await testNetworkConnectivity(
+      process.env.DB_HOST,
+      parseInt(process.env.DB_PORT || '3306')
+    );
+  }
+  
   // Create connection pool with configuration
+  console.log('\n🔍 Step 4: Creating Connection Pool...');
   pool = mysql.createPool({
     host: process.env.DB_HOST || 'localhost',
     user: process.env.DB_USER || 'root',
@@ -65,10 +243,6 @@ async function initializeDatabase() {
     maxIdle: 5,                 // Minimum 5 idle connections maintained
     ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
   });
-  
-  // Set query timeout at the pool level if supported by mysql2
-  // Note: Query timeout is typically set per query using SET SESSION max_execution_time = 30000
-  // This will be done in the query execution function
   
   // Log connection attempt (excluding password)
   console.log('=====================================');
@@ -88,11 +262,20 @@ async function initializeDatabase() {
   console.log(`🔌 Attempting connection...`);
   
   // Retry loop
+  let lastError = null;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       // Test connection by executing a simple query
       await pool.query('SELECT 1');
       console.log('✅ Database connected successfully');
+      
+      // Update connection status
+      connectionStatus.setConnectionStatus(true, null, {
+        hostname: process.env.DB_HOST,
+        port: process.env.DB_PORT,
+        dnsResolution: dnsResult,
+        networkCheck: networkCheckResult
+      });
       
       // Initialize schema metadata cache for query optimization
       try {
@@ -104,10 +287,29 @@ async function initializeDatabase() {
       
       return true;
     } catch (error) {
+      lastError = error;
       console.error(`❌ Database connection failed (attempt ${attempt}/${maxRetries}):`);
       console.error(`   Error Code: ${error.code}`);
       console.error(`   Error Message: ${error.message}`);
       console.error(`   SQL State: ${error.sqlState || 'N/A'}`);
+      
+      // Enhanced logging for ENOTFOUND errors
+      if (error.code === 'ENOTFOUND') {
+        console.error(`\n🔍 ENOTFOUND Error Analysis:`);
+        console.error(`   Hostname: ${process.env.DB_HOST}`);
+        console.error(`   DNS Resolution: ${dnsResult.success ? 'PASSED' : 'FAILED'}`);
+        if (!dnsResult.success) {
+          console.error(`   DNS Error: ${dnsResult.errorCode} - ${dnsResult.errorMessage}`);
+        }
+        console.error(`   Suggested troubleshooting:`);
+        console.error(`     1. Verify hostname spelling matches Aiven dashboard`);
+        console.error(`     2. Confirm Aiven service exists and is active`);
+        console.error(`     3. Check network connectivity to Aiven`);
+        console.error(`     4. Verify environment variable DB_HOST is set correctly`);
+        if (process.env.NODE_ENV === 'production') {
+          console.error(`     5. If using Render, verify environment variables in dashboard`);
+        }
+      }
       
       // If not last attempt, wait before retrying
       if (attempt < maxRetries) {
@@ -117,25 +319,54 @@ async function initializeDatabase() {
     }
   }
   
-  // All retries exhausted
+  // All retries exhausted - GRACEFUL DEGRADATION
   console.error('💥 Failed to connect to database after', maxRetries, 'attempts');
   
-  // TEMPORARY: Allow server to start even on database failure for debugging
-  console.warn('⚠️  TEMPORARY DEBUG MODE: Server will start without database');
-  console.warn('⚠️  Check the error messages above to diagnose the connection issue');
-  console.warn('⚠️  Database operations will fail until connection is fixed');
+  // Log comprehensive diagnostic information
+  console.log('\n📋 Diagnostic Information:');
+  console.log(diagnosticUtils.formatDiagnosticInfo(
+    {
+      host: process.env.DB_HOST,
+      port: process.env.DB_PORT,
+      user: process.env.DB_USER,
+      password: process.env.DB_PASSWORD,
+      database: process.env.DB_NAME,
+      ssl: process.env.DB_SSL === 'true'
+    },
+    lastError,
+    dnsResult,
+    networkCheckResult
+  ));
   
-  // Environment-specific behavior
+  // Update connection status with failure information
+  connectionStatus.setConnectionStatus(false, lastError, {
+    hostname: process.env.DB_HOST,
+    port: process.env.DB_PORT,
+    dnsResolution: dnsResult,
+    networkCheck: networkCheckResult,
+    attemptCount: maxRetries,
+    lastError: {
+      code: lastError?.code,
+      message: lastError?.message,
+      sqlState: lastError?.sqlState
+    }
+  });
+  
+  // Graceful degradation: Continue running instead of exiting
+  console.warn('\n🟡 CONNECTION FAILURE - GRACEFUL DEGRADATION ACTIVATED');
+  console.warn('⚠️  Server will continue running WITHOUT database connection');
+  console.warn('⚠️  File-based storage (data.json) will be used if available');
+  console.warn('⚠️  Some features may not work properly');
+  console.warn('⚠️  Check the diagnostic information above and fix the database configuration');
+  
   if (process.env.NODE_ENV === 'production') {
-    console.error('⚠️  PRODUCTION: Database connection failed but server will continue (DEBUG MODE)');
-    console.error('⚠️  This is temporary - fix the database connection ASAP!');
-  } else {
-    console.warn('⚠️  Running in development mode without database connection');
-    console.warn('Database operations will fail. Please check your database configuration.');
+    console.warn('⚠️  PRODUCTION: Database connection failed but server will continue');
+    console.warn('⚠️  This is a temporary workaround - fix the database connection ASAP!');
   }
   
   return false;
 }
+
 
 /**
  * Categorize database errors for appropriate HTTP response codes
@@ -171,6 +402,27 @@ function categorizeError(error) {
       errorCode === 'ECONNREFUSED' || 
       errorCode === 'PROTOCOL_ENQUEUE_AFTER_FATAL_ERROR' ||
       errorCode === 'ENOTFOUND') {
+    
+    // Special handling for ENOTFOUND - provide actionable guidance
+    if (errorCode === 'ENOTFOUND') {
+      return {
+        statusCode: 500,
+        clientMessage: 'Database hostname cannot be resolved. Please verify your database configuration. ' +
+                      'This usually means the hostname is incorrect or the network cannot reach the database server. ' +
+                      'Check Aiven dashboard and verify your connection settings.',
+        errorCategory: 'HOSTNAME_RESOLUTION_ERROR',
+        shouldLog: true,
+        logLevel: 'error',
+        timestamp,
+        suggestions: [
+          'Verify hostname spelling matches Aiven dashboard',
+          'Confirm Aiven service exists and is active',
+          'Check network connectivity to Aiven infrastructure',
+          'Verify environment variable DB_HOST is set correctly'
+        ]
+      };
+    }
+    
     return {
       statusCode: 500,
       clientMessage: 'Database connection lost. Please try again.',
@@ -280,6 +532,7 @@ function categorizeError(error) {
  * - Parameterized queries to prevent SQL injection
  * - Comprehensive error categorization
  * - Detailed internal logging without exposing internal details to clients
+ * - Connection status checking before query execution
  * 
  * @param {string} sql - SQL query with ? placeholders
  * @param {Array} params - Array of parameters to bind to placeholders
@@ -292,6 +545,17 @@ function categorizeError(error) {
 async function query(sql, params = []) {
   if (!pool) {
     throw new Error('Database pool not initialized. Call initializeDatabase() first.');
+  }
+  
+  // Check if database connection is available
+  if (!connectionStatus.isConnectionAvailable()) {
+    console.warn('❌ Query attempted without database connection');
+    const error = new Error('Database connection unavailable');
+    error.statusCode = 503;
+    error.clientMessage = 'Database connection unavailable. Please check connection logs for hostname resolution issues. ' +
+                         'If the problem persists, file-based storage may be used as fallback.';
+    error.errorCategory = 'CONNECTION_UNAVAILABLE';
+    throw error;
   }
   
   const connection = await pool.getConnection();
@@ -636,5 +900,9 @@ module.exports = {
   closePool,
   handleDatabaseError,
   // Export a function to get the pool for schema operations
-  getPool: () => pool
+  getPool: () => pool,
+  // Export connection status and diagnostic utilities
+  getConnectionStatus: connectionStatus.getConnectionStatus,
+  getDiagnosticInfo: connectionStatus.getDiagnosticInfo,
+  isConnectionAvailable: connectionStatus.isConnectionAvailable
 };
