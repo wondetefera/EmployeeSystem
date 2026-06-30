@@ -377,7 +377,7 @@
                             <i class="fas fa-edit"></i>
                         </button>
                         ${(currentUser.role === 'admin' || currentUser.role === 'manager') && emp.email !== currentUser.email ? 
-                            `<button class="btn btn-sm btn-outline-warning" onclick="resetPassword(\`${emp.email}\`, \`${[emp.first_name, emp.father_name, emp.gfather_name, emp.last_name].filter(name => name && name.trim()).join(' ')}\`)" title="Reset Password">
+                            `<button class="btn btn-sm btn-outline-warning" onclick="resetPassword('${emp.email}', '${[emp.first_name, emp.father_name, emp.gfather_name, emp.last_name].filter(name => name && name.trim()).join(' ')}')" title="Reset Password">
                                 <i class="fas fa-key"></i>
                             </button>` : ''
                         }
