@@ -304,35 +304,85 @@
         }
 
         function showPasswordResetAlert(newPassword, firstName, lastName, email) {
-            const alertHTML = `
-                <div class="alert alert-success alert-dismissible fade show position-fixed" style="top: 70px; right: 20px; z-index: 9999; min-width: 400px; max-width: 500px;">
-                    <h6><i class="fas fa-check-circle me-2"></i>Password Reset Successful</h6>
-                    <p><strong>${firstName} ${lastName}</strong></p>
-                    <div class="small">
-                        <strong>Email:</strong> <code>${email}</code><br>
-                        <strong>New Password:</strong> <code>${newPassword}</code>
-                        <button class="btn btn-sm btn-outline-success mt-1" onclick="copyPasswordToClipboard(\`${newPassword}\`)">
-                            <i class="fas fa-copy me-1"></i>Copy Password
-                        </button>
+            // Create a prominent modal dialog instead of a fleeting alert
+            const modalHTML = `
+                <div class="modal fade show" id="passwordResetModal" tabindex="-1" role="dialog" style="display: block; background-color: rgba(0,0,0,0.5);">
+                    <div class="modal-dialog modal-dialog-centered" role="document">
+                        <div class="modal-content border-success" style="border-width: 3px;">
+                            <div class="modal-header bg-success text-white">
+                                <h5 class="modal-title">
+                                    <i class="fas fa-check-circle me-2"></i>Password Reset Successful
+                                </h5>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="alert alert-success mb-3" role="alert">
+                                    <i class="fas fa-check me-2"></i>
+                                    The password has been successfully reset for <strong>${firstName} ${lastName}</strong>
+                                </div>
+                                
+                                <div class="card mb-3">
+                                    <div class="card-body">
+                                        <div class="row mb-2">
+                                            <div class="col-sm-4"><strong>Employee Name:</strong></div>
+                                            <div class="col-sm-8">${firstName} ${lastName}</div>
+                                        </div>
+                                        <div class="row mb-2">
+                                            <div class="col-sm-4"><strong>Email:</strong></div>
+                                            <div class="col-sm-8"><code>${email}</code></div>
+                                        </div>
+                                        <hr>
+                                        <div class="row">
+                                            <div class="col-sm-4"><strong>New Password:</strong></div>
+                                            <div class="col-sm-8">
+                                                <div class="input-group">
+                                                    <input type="text" class="form-control" id="reset-password-display" value="${newPassword}" readonly style="font-weight: bold; font-size: 16px;">
+                                                    <button class="btn btn-outline-success" type="button" onclick="copyResetPassword(\`${newPassword}\`)">
+                                                        <i class="fas fa-copy me-1"></i>Copy
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="alert alert-info mb-0" role="alert">
+                                    <i class="fas fa-info-circle me-2"></i>
+                                    <strong>Note:</strong> Share this temporary password with the employee. They should change it on their first login.
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-success" data-bs-dismiss="modal" onclick="closeResetModal()">
+                                    <i class="fas fa-check me-1"></i>Confirmed
+                                </button>
+                            </div>
+                        </div>
                     </div>
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                 </div>
             `;
             
-            document.body.insertAdjacentHTML('beforeend', alertHTML);
+            // Remove existing modal if any
+            const existingModal = document.getElementById('passwordResetModal');
+            if (existingModal) {
+                existingModal.remove();
+            }
             
-            // Auto remove after 10 seconds
-            setTimeout(() => {
-                const alert = document.querySelector('.alert-success');
-                if (alert) {
-                    alert.remove();
-                }
-            }, 10000);
+            // Add modal to page
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+            
+            // Show modal using Bootstrap
+            const modal = new bootstrap.Modal(document.getElementById('passwordResetModal'));
+            modal.show();
+            
+            // Remove modal from DOM after it's hidden
+            document.getElementById('passwordResetModal').addEventListener('hidden.bs.modal', function() {
+                this.remove();
+            });
         }
-
-        function copyPasswordToClipboard(password) {
+        
+        function copyResetPassword(password) {
             navigator.clipboard.writeText(password).then(() => {
-                showAlert('info', 'Password copied to clipboard!');
+                showAlert('success', 'Password copied to clipboard!');
             }).catch(() => {
                 // Fallback for older browsers
                 const textArea = document.createElement('textarea');
@@ -341,8 +391,15 @@
                 textArea.select();
                 document.execCommand('copy');
                 document.body.removeChild(textArea);
-                showAlert('info', 'Password copied to clipboard!');
+                showAlert('success', 'Password copied to clipboard!');
             });
+        }
+        
+        function closeResetModal() {
+            const modal = document.getElementById('passwordResetModal');
+            if (modal) {
+                modal.remove();
+            }
         }
 
         async function deleteEmployee(employeeId, firstName, lastName, email) {
