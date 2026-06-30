@@ -10,7 +10,7 @@
  */
 
 const { query, transaction } = require('./connection');
-// const { getColumnSet, getColumnSetAliased } = require('./schema-cache'); // File not found - commented out
+const { getColumnSet, getColumnSetAliased } = require('./schema-cache');
 
 
 // ========== EMPLOYEE OPERATIONS ==========
