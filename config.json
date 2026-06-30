@@ -3,5 +3,18 @@
     "host": "10.192.230.251",
     "port": 8080,
     "allowExternalConnections": true
+  },
+  "email": {
+    "smtp": {
+      "host": "smtp.gmail.com",
+      "port": 587,
+      "secure": false,
+      "auth": {
+        "user": "system@company.com",
+        "pass": "app-specific-password"
+      }
+    },
+    "from": "system@company.com",
+    "sendTime": "09:00"
   }
 }

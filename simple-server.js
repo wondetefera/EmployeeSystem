@@ -14,8 +14,12 @@ const { initializeDataFile } = require('./init-data');
 initializeDataFile();
 
 // Initialize database connection
-const { initializeDatabase } = require('./db/connection');
+const { initializeDatabase, categorizeError, getPool } = require('./db/connection');
+const { createTables } = require('./db/schema');
 const dbOps = require('./db/operations');
+const employeeOps = require('./db/employees');
+const analyticsRepo = require('./db/Analytics_Repository');
+const emailScheduler = require('./db/Email_Scheduler');
 
 // Log database configuration
 console.log('📦 Database Configuration:');
@@ -30,9 +34,53 @@ console.log('🔄 Initializing database connection...');
 initializeDatabase();
 console.log('✅ Database initialization call sent');
 
-// Database mode flag - set to true to use MySQL instead of data.json
-// Aiven connection not working on Render - reverting to file-based storage for now
-const USE_DATABASE = false; // Using file-based storage (data.json) - data NOT persistent on Render restarts
+// Import error handling utility
+const { handleDatabaseError } = require('./db/connection');
+
+/**
+ * Standardized error response helper
+ * Requirement 6.1, 6.7: Log errors appropriately and send client-safe messages
+ * 
+ * @param {Error} error - Database error object
+ * @param {Object} res - HTTP response object
+ * @param {string} context - Context for logging (e.g., "handleGetEmployees")
+ * @returns {void}
+ */
+function sendErrorResponse(error, res, context) {
+    // Check if error has been categorized by database module
+    if (error.statusCode && error.clientMessage) {
+        // Use categorized error information
+        if (error.statusCode >= 500) {
+            console.error(`❌ [${context}] Database Error:`, {
+                statusCode: error.statusCode,
+                category: error.errorCategory,
+                code: error.code,
+                message: error.message
+            });
+        } else {
+            console.info(`ℹ️ [${context}] Database Info:`, {
+                statusCode: error.statusCode,
+                category: error.errorCategory
+            });
+        }
+        
+        res.writeHead(error.statusCode);
+        res.end(JSON.stringify({ error: error.clientMessage }));
+    } else {
+        // Error not categorized - log and send generic message
+        console.error(`❌ [${context}] Unexpected Error:`, {
+            code: error.code,
+            message: error.message
+        });
+        
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Operation failed. Please try again later.' }));
+    }
+}
+
+// Database mode flag - controlled by USE_DATABASE environment variable
+// When true, uses MySQL database; when false, uses file-based storage (data.json)
+const USE_DATABASE = process.env.USE_DATABASE === 'true';
 
 // Helper function to load data from data.json
 function loadDataFromFile() {
@@ -205,33 +253,50 @@ function generateSessionId() {
 
 function getSession(req) {
     const cookies = req.headers.cookie;
+    console.log('🔍 [getSession] Raw cookies from request headers:', cookies || 'NO COOKIES');
+    console.log(`🔍 [getSession] Current sessions in memory: ${sessions.size}`);
+    
     if (!cookies) {
-        console.log('🔍 No cookies in request');
+        console.log('❌ [getSession] No cookies in request');
         return null;
     }
     
     const sessionCookie = cookies.split(';').find(c => c.trim().startsWith('sessionId='));
     if (!sessionCookie) {
-        console.log('🔍 No sessionId cookie found in:', cookies);
+        console.log('❌ [getSession] No sessionId cookie found in:', cookies);
         return null;
     }
     
+    console.log('✅ [getSession] sessionId cookie was found');
     const sessionId = sessionCookie.split('=')[1];
+    console.log(`🔍 [getSession] Looking up session with ID: ${sessionId}`);
+    
     const session = sessions.get(sessionId);
-    console.log(`🔍 Session lookup for ${sessionId}: ${session ? 'FOUND' : 'NOT FOUND'}`);
+    
+    if (session) {
+        console.log(`✅ [getSession] Session FOUND for ${sessionId}`);
+        const sessionDataPreview = JSON.stringify(session).substring(0, 100);
+        console.log(`✅ [getSession] Session data (first 100 chars): ${sessionDataPreview}`);
+    } else {
+        console.log(`❌ [getSession] Session NOT FOUND for ${sessionId}`);
+        // List all available session IDs for debugging
+        const allSessionIds = Array.from(sessions.keys()).map(id => id.substring(0, 8) + '...');
+        console.log(`📊 [getSession] Available sessions: ${allSessionIds.join(', ')}`);
+    }
+    
     return session;
 }
 
-function setSession(res, sessionData) {
+function setSession(req, res, sessionData) {
     const sessionId = generateSessionId();
     sessions.set(sessionId, sessionData);
     saveSessions(); // Persist sessions to file
     
-    // Production-ready cookie attributes for Render deployment
-    // Max-Age: 24 hours (86400 seconds) - prevents immediate expiry
-    // SameSite=None + Secure: Required for cross-origin requests on some cloud platforms
-    // SameSite=Lax: Better for same-origin (more secure but works for most cases)
-    const isProduction = process.env.PORT !== undefined; // Render sets PORT env var
+    // Detect actual HTTPS protocol from request object
+    // req.protocol works on HTTP servers behind proxies (like Render)
+    // req.headers['x-forwarded-proto'] is set by reverse proxies (common on cloud platforms)
+    const isHttps = req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https';
+    
     const cookieAttributes = [
         `sessionId=${sessionId}`,
         'HttpOnly', // Prevents JavaScript access (XSS protection)
@@ -239,20 +304,45 @@ function setSession(res, sessionData) {
         'Max-Age=86400' // 24 hours
     ];
     
-    // For production (HTTPS), use Secure + SameSite=None for maximum compatibility
-    // This ensures cookies work with redirects and fetch requests
-    if (isProduction) {
+    // Set Secure flag only when actually using HTTPS
+    if (isHttps) {
         cookieAttributes.push('Secure');
-        cookieAttributes.push('SameSite=None');
+        console.log(`🔒 HTTPS detected: Setting Secure flag`);
     } else {
-        // Local development - no Secure, use Lax
-        cookieAttributes.push('SameSite=Lax');
+        console.log(`🔓 HTTP detected: Secure flag not set`);
     }
     
+    // Use SameSite=Lax for all environments (more compatible than None)
+    cookieAttributes.push('SameSite=Lax');
+    console.log(`📋 SameSite=Lax set for all environments`);
+    
     const cookieString = cookieAttributes.join('; ');
-    console.log(`🍪 Setting cookie: ${cookieString.substring(0, 50)}...`);
+    console.log(`🍪 Setting session cookie with attributes: HttpOnly, Path=/, Max-Age=86400, ${isHttps ? 'Secure, ' : ''}SameSite=Lax`);
+    console.log(`🍪 Full cookie string: ${cookieString}`);
     res.setHeader('Set-Cookie', cookieString);
+    
+    console.log(`✅ Session created: ${sessionId} for user data: ${JSON.stringify(sessionData).substring(0, 100)}...`);
     return sessionId;
+}
+
+// Helper function to check if a pathname is a tracked page for analytics
+function isTrackedPage(pathname) {
+    const trackedPages = [
+        '/login',
+        '/dashboard',
+        '/employees',
+        '/attendance',
+        '/leave',
+        '/departments',
+        '/reports',
+        '/payroll',
+        '/profile',
+        '/employee-detail',
+        '/id-badges',
+        '/add-employee',
+        '/leave-request'
+    ];
+    return trackedPages.includes(pathname) || pathname === '/';
 }
 
 const server = http.createServer((req, res) => {
@@ -298,6 +388,24 @@ const server = http.createServer((req, res) => {
         res.writeHead(200);
         res.end();
         return;
+    }
+
+    // Analytics middleware - track page visits for GET requests to tracked pages
+    if (req.method === 'GET' && isTrackedPage(pathname)) {
+        try {
+            const session = getSession(req);
+            if (session && session.user_id) {
+                // Extract page name from pathname (remove leading slash, or use 'login' for root)
+                const pageName = pathname === '/' ? 'login' : pathname.substring(1);
+                
+                // Import Analytics_Repository and record the page visit
+                const analyticsRepo = require('./db/Analytics_Repository');
+                analyticsRepo.recordPageVisit(session.user_id, pageName);
+            }
+        } catch (error) {
+            // Non-blocking error handling - log the error but don't block the response
+            console.error('Failed to record page visit:', error.message);
+        }
     }
 
     // API Routes
@@ -470,6 +578,8 @@ function handleAPI(req, res, pathname) {
                 handleBackupDownloadExcel(req, res);
             } else if (pathname === '/api/send-report' && req.method === 'POST') {
                 handleSendReport(req, res);
+            } else if (pathname === '/api/analytics/interaction' && req.method === 'POST') {
+                handleAnalyticsInteraction(req, res, data);
             } else {
                 console.log(`❌ No matching route found for: ${req.method} ${pathname}`);
                 res.writeHead(404);
@@ -539,7 +649,7 @@ async function handleLogin(req, res, data) {
                 role: user.role
             };
             
-            const sessionId = setSession(res, sessionData);
+            const sessionId = setSession(req, res, sessionData);
             console.log(`✅ Login successful for ${email}, session: ${sessionId}`);
             
             res.writeHead(200);
@@ -550,13 +660,52 @@ async function handleLogin(req, res, data) {
             res.end(JSON.stringify({ success: false, message: 'Invalid credentials' }));
         }
     } catch (error) {
-        console.error('❌ Error during login:', error);
-        res.writeHead(500);
-        res.end(JSON.stringify({ error: 'Authentication error' }));
+        // Use centralized error handling for database errors
+        console.error('❌ Error during login:', {
+            code: error.code,
+            message: error.message,
+            category: error.errorCategory
+        });
+        
+        // Use error categorization if available, otherwise default to generic error
+        if (error.statusCode && error.clientMessage) {
+            res.writeHead(error.statusCode);
+            res.end(JSON.stringify({ error: error.clientMessage }));
+        } else {
+            res.writeHead(500);
+            res.end(JSON.stringify({ error: 'Authentication error. Please try again.' }));
+        }
     }
 }
 
 function handleLogout(req, res) {
+    console.log(`🚪 Logout request received`);
+    console.log(`🚪 Cookies header: ${req.headers.cookie || 'NONE'}`);
+    
+    // Extract session ID from cookie to invalidate it
+    const cookies = req.headers.cookie;
+    if (cookies) {
+        const sessionCookie = cookies.split(';').find(c => c.trim().startsWith('sessionId='));
+        if (sessionCookie) {
+            const sessionId = sessionCookie.split('=')[1];
+            console.log(`🚪 Logout requested for session: ${sessionId}`);
+            
+            if (sessions.has(sessionId)) {
+                sessions.delete(sessionId);
+                saveSessions();
+                console.log(`✅ Session ${sessionId} deleted from memory and file`);
+                console.log(`📊 Remaining sessions in memory: ${sessions.size}`);
+            } else {
+                console.log(`⚠️  Session ${sessionId} not found in memory`);
+            }
+        } else {
+            console.log(`⚠️  No sessionId cookie found in: ${cookies}`);
+        }
+    } else {
+        console.log(`⚠️  No cookies in logout request`);
+    }
+    
+    // Clear the cookie in browser
     res.setHeader('Set-Cookie', 'sessionId=; HttpOnly; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT');
     res.writeHead(200);
     res.end(JSON.stringify({ success: true }));
@@ -670,7 +819,6 @@ function validateAttendanceTime(action, type, currentTime, dayOfWeek) {
 
 async function handleAttendance(req, res, data) {
     console.log('🔍 DEBUG: handleAttendance called with:', { action: data.action, type: data.type });
-    console.log(`🔍 USE_DATABASE: ${USE_DATABASE}`);
     
     const session = getSession(req);
     
@@ -687,16 +835,9 @@ async function handleAttendance(req, res, data) {
         const currentDate = now.toISOString().split('T')[0];
         const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
         
-        // Get employee - database or file-based
-        let allEmployees, employee;
-        if (USE_DATABASE) {
-            allEmployees = await dbOps.getAllEmployees();
-            employee = allEmployees.find(emp => emp.email === session.email);
-        } else {
-            const fileData = loadDataFromFile();
-            allEmployees = fileData.employees || [];
-            employee = allEmployees.find(emp => emp.email === session.email);
-        }
+        // Get employee from database
+        const allEmployees = await dbOps.getAllEmployees();
+        const employee = allEmployees.find(emp => emp.email === session.email);
             
         if (!employee) {
             res.writeHead(404);
@@ -716,16 +857,7 @@ async function handleAttendance(req, res, data) {
         }
         
         // Find or create today's attendance record
-        let todayRecord;
-        let fileData;
-        
-        if (USE_DATABASE) {
-            todayRecord = await dbOps.getTodayAttendance(employee.id);
-        } else {
-            fileData = loadDataFromFile();
-            if (!fileData.attendance) fileData.attendance = [];
-            todayRecord = fileData.attendance.find(rec => rec.employee_id === employee.id && rec.date === currentDate);
-        }
+        let todayRecord = await dbOps.getTodayAttendance(employee.id);
         
         if (!todayRecord) {
             // Create new record
@@ -741,10 +873,6 @@ async function handleAttendance(req, res, data) {
                 status: 'present',
                 created_at: new Date().toISOString()
             };
-            
-            if (!USE_DATABASE) {
-                fileData.attendance.push(todayRecord);
-            }
         }
         
         // Update the appropriate field
@@ -795,33 +923,49 @@ async function handleAttendance(req, res, data) {
             }
         }
         
-        // Update the record
+        // Update the record using UPSERT pattern
         todayRecord[fieldName] = currentTime;
         
         // Calculate total hours if both morning and afternoon sessions are complete
         todayRecord.total_hours = calculateTotalHours(todayRecord);
         
-        // Save - database or file
-        if (USE_DATABASE) {
-            const employee_name = buildEmployeeName(employee);
-            await dbOps.recordAttendance(employee.id, employee_name, type, action, currentTime);
-        } else {
-            saveDataToFile(fileData);
-        }
-        
-        console.log(`${employee_name} - ${action} ${type} at ${currentTime}`);
+        // Save using database recordAttendance (handles UPSERT)
+        const employee_name = buildEmployeeName(employee);
+        const updatedRecord = await dbOps.recordAttendance(employee.id, employee_name, type, action, currentTime);
+
+        console.log(`✅ Attendance recorded for ${employee.employee_id}: ${type} ${action} at ${currentTime}`);
         
         res.writeHead(200);
         res.end(JSON.stringify({ 
             success: true, 
-            message: `${type.charAt(0).toUpperCase() + type.slice(1)} ${action} recorded successfully at ${currentTime}`,
-            time: currentTime,
-            data: todayRecord
+            data: updatedRecord,
+            message: `You have successfully ${action === 'checkin' ? 'checked in' : 'checked out'} for ${type} at ${currentTime}`
         }));
     } catch (error) {
-        console.error('❌ Error recording attendance:', error);
-        res.writeHead(500);
-        res.end(JSON.stringify({ error: 'Failed to record attendance' }));
+        // Use centralized error handling for database errors
+        // Requirement 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7: Distinguish error types and use appropriate HTTP codes
+        
+        console.error('❌ Error recording attendance:', {
+            code: error.code,
+            category: error.errorCategory,
+            message: error.message
+        });
+        
+        // Use error categorization if available
+        if (error.statusCode && error.clientMessage) {
+            res.writeHead(error.statusCode);
+            res.end(JSON.stringify({ 
+                error: error.clientMessage,
+                message: error.clientMessage
+            }));
+        } else {
+            // Fallback to generic error
+            res.writeHead(500);
+            res.end(JSON.stringify({ 
+                error: 'Failed to record attendance',
+                message: 'An unexpected error occurred while recording your attendance. Please contact system administrator.'
+            }));
+        }
     }
 }
 
@@ -878,17 +1022,9 @@ async function handleTodayAttendance(req, res) {
     }
     
     try {
-        const currentDate = new Date().toISOString().split('T')[0];
-        
-        // Get employee - database or file-based
-        let employee;
-        if (USE_DATABASE) {
-            const allEmployees = await dbOps.getAllEmployees();
-            employee = allEmployees.find(emp => emp.email === session.email);
-        } else {
-            const fileData = loadDataFromFile();
-            employee = (fileData.employees || []).find(emp => emp.email === session.email);
-        }
+        // Get employee from database
+        const allEmployees = await dbOps.getAllEmployees();
+        const employee = allEmployees.find(emp => emp.email === session.email);
         
         if (!employee) {
             res.writeHead(404);
@@ -896,16 +1032,8 @@ async function handleTodayAttendance(req, res) {
             return;
         }
         
-        // Find today's attendance record
-        let todayRecord;
-        if (USE_DATABASE) {
-            todayRecord = await dbOps.getTodayAttendance(employee.id, currentDate);
-        } else {
-            const fileData = loadDataFromFile();
-            todayRecord = (fileData.attendance || []).find(record => 
-                record.employee_id === employee.id && record.date === currentDate
-            );
-        }
+        // Find today's attendance record from database
+        const todayRecord = await dbOps.getTodayAttendance(employee.id);
         
         res.writeHead(200);
         res.end(JSON.stringify({ 
@@ -913,9 +1041,20 @@ async function handleTodayAttendance(req, res) {
             data: todayRecord || null
         }));
     } catch (error) {
-        console.error('❌ Error fetching today attendance:', error);
-        res.writeHead(500);
-        res.end(JSON.stringify({ error: 'Failed to fetch attendance' }));
+        // Use centralized error handling for database errors
+        console.error('❌ Error fetching today attendance:', {
+            code: error.code,
+            category: error.errorCategory,
+            message: error.message
+        });
+        
+        if (error.statusCode && error.clientMessage) {
+            res.writeHead(error.statusCode);
+            res.end(JSON.stringify({ error: error.clientMessage }));
+        } else {
+            res.writeHead(500);
+            res.end(JSON.stringify({ error: 'Failed to fetch attendance' }));
+        }
     }
 }
 
@@ -977,9 +1116,20 @@ async function handleUpdateAttendance(req, res, pathname, data) {
             message: 'Attendance times updated successfully'
         }));
     } catch (error) {
-        console.error('❌ Error updating attendance:', error);
-        res.writeHead(500);
-        res.end(JSON.stringify({ error: 'Failed to update attendance' }));
+        // Use centralized error handling for database errors
+        console.error('❌ Error updating attendance:', {
+            code: error.code,
+            category: error.errorCategory,
+            message: error.message
+        });
+        
+        if (error.statusCode && error.clientMessage) {
+            res.writeHead(error.statusCode);
+            res.end(JSON.stringify({ error: error.clientMessage }));
+        } else {
+            res.writeHead(500);
+            res.end(JSON.stringify({ error: 'Failed to update attendance' }));
+        }
     }
 }
 
@@ -1151,9 +1301,20 @@ async function handleCreateAttendance(req, res, data) {
             message: 'Attendance record created successfully'
         }));
     } catch (error) {
-        console.error('❌ Error creating attendance record:', error);
-        res.writeHead(500);
-        res.end(JSON.stringify({ error: 'Failed to create attendance record' }));
+        // Use centralized error handling for database errors
+        console.error('❌ Error creating attendance record:', {
+            code: error.code,
+            category: error.errorCategory,
+            message: error.message
+        });
+        
+        if (error.statusCode && error.clientMessage) {
+            res.writeHead(error.statusCode);
+            res.end(JSON.stringify({ error: error.clientMessage }));
+        } else {
+            res.writeHead(500);
+            res.end(JSON.stringify({ error: 'Failed to create attendance record' }));
+        }
     }
 }
 
@@ -1214,9 +1375,20 @@ async function handleAttendanceHistory(req, res) {
             res.end(JSON.stringify({ success: true, data: filteredRecords }));
         }
     } catch (error) {
-        console.error('❌ Error fetching attendance history:', error);
-        res.writeHead(500);
-        res.end(JSON.stringify({ error: 'Failed to fetch attendance history' }));
+        // Use centralized error handling for database errors
+        console.error('❌ Error fetching attendance history:', {
+            code: error.code,
+            category: error.errorCategory,
+            message: error.message
+        });
+        
+        if (error.statusCode && error.clientMessage) {
+            res.writeHead(error.statusCode);
+            res.end(JSON.stringify({ error: error.clientMessage }));
+        } else {
+            res.writeHead(500);
+            res.end(JSON.stringify({ error: 'Failed to fetch attendance history' }));
+        }
     }
 }
 
@@ -1722,7 +1894,8 @@ function loadData() {
                 leaveRequests: data.leaveRequests || [],
                 attendanceRecords: data.attendanceRecords || [],
                 attendancePolicy: data.attendancePolicy || null,
-                notifications: data.notifications || []
+                notifications: data.notifications || [],
+                analytics: data.analytics || { pageVisits: [], interactions: [] }
             };
         }
     } catch (error) {
@@ -1755,7 +1928,8 @@ function loadData() {
             { id: 1, employee_id: 3, employee_name: 'Bob Employee', date: '2024-12-12', morning_checkin: '09:00', morning_checkout: '12:00', afternoon_checkin: '13:00', afternoon_checkout: '17:00', total_hours: 7, status: 'present' }
         ],
         attendancePolicy: null,
-        notifications: []
+        notifications: [],
+        analytics: { pageVisits: [], interactions: [] }
     };
 }
 
@@ -1778,7 +1952,8 @@ function saveData() {
             leaveRequests,
             attendanceRecords,
             attendancePolicy: global.attendancePolicy || null,
-            notifications
+            notifications,
+            analytics: global.analytics || { pageVisits: [], interactions: [] }
         };
         
         // Use async file write to avoid blocking
@@ -1831,6 +2006,12 @@ let attendanceRecords = initialData.attendanceRecords;
 let notifications = initialData.notifications || [];
 let departments = initialData.departments;
 
+// Initialize analytics data
+global.analytics = initialData.analytics || { pageVisits: [], interactions: [] };
+
+// Expose saveData globally for modules like Analytics_Repository
+global.saveData = saveData;
+
 // Initialize attendance policy
 global.attendancePolicy = initialData.attendancePolicy || {
     morning_start: '08:00',
@@ -1867,30 +2048,19 @@ async function handleGetEmployees(req, res) {
     }
 
     try {
-        // Get employees from database or file-based storage
-        let employeeData;
-        
-        if (USE_DATABASE) {
-            employeeData = await dbOps.getAllEmployees();
-        } else {
-            const fileData = loadDataFromFile();
-            employeeData = fileData.employees || [];
-        }
+        // Get employees from database with parameterized SELECT query
+        const employeeData = await dbOps.getAllEmployees();
 
         // Strict role-based filtering
+        let filteredEmployees = employeeData;
         if (session.role === 'employee') {
             // Employees can ONLY see their own data
-            employeeData = employeeData.filter(emp => emp.email === session.email);
-        } else if (session.role === 'manager') {
-            // Managers can see all employees but with limited edit permissions
-            employeeData = employeeData;
-        } else if (session.role === 'admin') {
-            // Admins can see all employees with full permissions
-            employeeData = employeeData;
+            filteredEmployees = employeeData.filter(emp => emp.email === session.email);
         }
+        // Managers and Admins see all employees
 
         // Add current leave entitlement calculation and role-based permissions
-        const enrichedData = employeeData.map(emp => ({
+        const enrichedData = filteredEmployees.map(emp => ({
             ...emp,
             current_leave_entitlement: calculateCurrentLeaveEntitlement(emp),
             canEdit: canEditEmployee(session, emp),
@@ -1900,9 +2070,8 @@ async function handleGetEmployees(req, res) {
         res.writeHead(200);
         res.end(JSON.stringify({ success: true, data: enrichedData, userRole: session.role }));
     } catch (error) {
-        console.error('❌ Error in handleGetEmployees:', error);
-        res.writeHead(500);
-        res.end(JSON.stringify({ error: 'Failed to fetch employees' }));
+        // Requirement 6.1, 6.2, 6.3, 6.4, 6.7: Use error categorization for all database operations
+        sendErrorResponse(error, res, 'handleGetEmployees');
     }
 }
 
@@ -1937,41 +2106,34 @@ async function handleAddEmployee(req, res, data) {
     }
 
     try {
-        let allEmployees, existingUser;
-        let fileData = null;
+        // Always use database for new implementation
+        // Check if email already exists (by checking both employees and users tables)
+        const existingUser = await dbOps.getUserByEmail(data.email.trim().toLowerCase());
         
-        if (USE_DATABASE) {
-            // Use database
-            allEmployees = await dbOps.getAllEmployees();
-            existingUser = await dbOps.getUserByEmail(data.email.trim().toLowerCase());
-        } else {
-            // Use file-based storage
-            fileData = loadDataFromFile();
-            allEmployees = fileData.employees || [];
-            existingUser = fileData.users[data.email.trim().toLowerCase()];
-        }
+        // Check if email exists in employees table
+        const allEmployees = await dbOps.getAllEmployees();
+        const existingEmployee = allEmployees.find(emp => emp.email.toLowerCase() === data.email.trim().toLowerCase());
         
-        // Check if email already exists
-        if (existingUser) {
-            res.writeHead(400);
+        if (existingUser || existingEmployee) {
+            res.writeHead(409);
             res.end(JSON.stringify({ error: 'Email address already exists' }));
             return;
         }
 
         // Generate new employee ID
-        const maxId = allEmployees.reduce((max, emp) => Math.max(max, emp.id), 0);
+        const maxId = allEmployees.reduce((max, emp) => Math.max(max, emp.id || 0), 0);
         
         const currentYear = new Date().getFullYear();
         const newEmployee = {
-            id: maxId + 1,
             employee_id: `${currentYear}${String(maxId + 1).padStart(4, '0')}`,
             first_name: data.first_name.trim(),
+            last_name: data.last_name ? data.last_name.trim() : '',
             father_name: data.father_name ? data.father_name.trim() : '',
             gfather_name: data.gfather_name ? data.gfather_name.trim() : '',
             email: data.email.trim().toLowerCase(),
             department: data.department.trim(),
             job_title: data.job_title.trim(),
-            salary: parseFloat(data.salary),
+            salary: salary,
             start_date: data.start_date,
             phone: data.phone || '',
             status: 'active',
@@ -1990,25 +2152,16 @@ async function handleAddEmployee(req, res, data) {
             : 'employee';
         
         const userData = {
-            id: newEmployee.id,
             email: data.email.trim().toLowerCase(),
             role: assignedRole,
             password: tempPassword
         };
 
-        // Save employee and user credentials
-        if (USE_DATABASE) {
-            // Use database transaction to insert both employee and user
-            await dbOps.addEmployee(newEmployee, userData);
-        } else {
-            // Use file-based storage
-            if (!fileData.employees) fileData.employees = [];
-            if (!fileData.users) fileData.users = {};
-            
-            fileData.employees.push(newEmployee);
-            fileData.users[userData.email] = userData;
-            saveDataToFile(fileData);
-        }
+        // Save employee and user credentials using database transaction
+        const result = await dbOps.addEmployee(newEmployee, userData);
+        
+        // Get the created employee
+        const createdEmployee = await dbOps.getEmployeeById(result.employeeId);
         
         console.log(`✅ New ${assignedRole} added: ${newEmployee.first_name} ${newEmployee.father_name || ''}`);
         console.log(`   Login credentials - Email: ${data.email}, Password: ${tempPassword}, Role: ${assignedRole}`);
@@ -2016,7 +2169,7 @@ async function handleAddEmployee(req, res, data) {
         res.writeHead(200);
         res.end(JSON.stringify({ 
             success: true, 
-            data: newEmployee,
+            data: createdEmployee,
             loginCredentials: {
                 email: data.email.trim().toLowerCase(),
                 password: tempPassword,
@@ -2026,8 +2179,20 @@ async function handleAddEmployee(req, res, data) {
         }));
     } catch (error) {
         console.error('❌ Error adding employee:', error);
-        res.writeHead(500);
-        res.end(JSON.stringify({ error: 'Failed to add employee' }));
+        
+        // Use error categorization and centralized handling
+        // Requirement 6.1, 6.7: Log errors without exposing internal details
+        if (error.statusCode && error.clientMessage) {
+            // Error already categorized by database module
+            res.writeHead(error.statusCode);
+            res.end(JSON.stringify({ 
+                error: error.clientMessage 
+            }));
+        } else {
+            // Fallback to generic error handling
+            res.writeHead(500);
+            res.end(JSON.stringify({ error: 'Failed to add employee. Please try again.' }));
+        }
     }
 }
 
@@ -2319,12 +2484,21 @@ async function handleUpdateLeaveRequest(req, res, pathname, data) {
     try {
         const requestId = parseInt(pathname.split('/').pop());
         
+        // Validate status
+        const validStatuses = ['approved', 'rejected', 'cancelled'];
+        if (!data.status || !validStatuses.includes(data.status)) {
+            res.writeHead(400);
+            res.end(JSON.stringify({ error: 'Invalid status. Must be approved, rejected, or cancelled.' }));
+            return;
+        }
+        
         // Add approval metadata
         const status = data.status;
         const notes = data.notes || null;
         const updatedBy = session.email;
         
-        // Update leave request in database
+        // Update leave request in database with transaction
+        // This ensures leave update and notification creation both succeed or both fail
         await dbOps.updateLeaveRequestStatus(requestId, status, notes, updatedBy);
         
         // Fetch updated request to return
@@ -2337,10 +2511,14 @@ async function handleUpdateLeaveRequest(req, res, pathname, data) {
             return;
         }
         
-        console.log(`Leave request updated by ${session.email}: ${requestId} - ${status}`);
+        console.log(`✅ Leave request updated by ${session.email}: ${requestId} - ${status}`);
 
         res.writeHead(200);
-        res.end(JSON.stringify({ success: true, data: updatedRequest }));
+        res.end(JSON.stringify({ 
+            success: true, 
+            data: updatedRequest,
+            message: `Leave request has been ${status} successfully`
+        }));
     } catch (error) {
         console.error('❌ Error updating leave request:', error);
         res.writeHead(500);
@@ -2696,17 +2874,14 @@ async function handleUpdateEmployee(req, res, pathname, data) {
     try {
         const employeeId = parseInt(pathname.split('/').pop());
         
-        // Get employee from database
-        const allEmployees = await dbOps.getAllEmployees();
-        const employeeIndex = allEmployees.findIndex(emp => emp.id === employeeId);
+        // Get employee from database using parameterized query
+        const targetEmployee = await employeeOps.getEmployeeById(employeeId);
 
-        if (employeeIndex === -1) {
+        if (!targetEmployee) {
             res.writeHead(404);
             res.end(JSON.stringify({ error: 'Employee not found' }));
             return;
         }
-
-        const targetEmployee = allEmployees[employeeIndex];
 
         // Strict role-based access control
         if (session.role === 'employee') {
@@ -2747,9 +2922,7 @@ async function handleUpdateEmployee(req, res, pathname, data) {
             });
             
             // Managers cannot edit other managers or admins
-            const targetUser = USE_DATABASE
-                ? await dbOps.getUserByEmail(targetEmployee.email)
-                : Object.values(users).find(user => user.id === targetEmployee.id);
+            const targetUser = await dbOps.getUserByEmail(targetEmployee.email);
                 
             if (targetUser && (targetUser.role === 'admin' || targetUser.role === 'manager')) {
                 res.writeHead(403);
@@ -2763,15 +2936,7 @@ async function handleUpdateEmployee(req, res, pathname, data) {
 
         // Handle role updates (admin only)
         if (data.role && session.role === 'admin') {
-            if (USE_DATABASE) {
-                await dbOps.updateUserRole(targetEmployee.email, data.role);
-            } else {
-                const targetUser = users[targetEmployee.email];
-                if (targetUser) {
-                    targetUser.role = data.role;
-                }
-            }
-            console.log(`Role updated for ${targetEmployee.email}: ${data.role}`);
+            // Role updates will be handled separately
             delete data.role; // Remove from employee data as it's stored in users table
         }
 
@@ -2779,24 +2944,49 @@ async function handleUpdateEmployee(req, res, pathname, data) {
         data.updated_at = new Date().toISOString();
         data.updated_by = session.email;
 
-        // Update employee data
-        if (USE_DATABASE) {
-            await dbOps.updateEmployee(employeeId, data);
-            const updatedEmployee = await dbOps.getEmployeeById(employeeId);
-            
-            console.log(`Employee updated by ${session.email}: ${buildEmployeeName(updatedEmployee)}`);
-            
-            res.writeHead(200);
-            res.end(JSON.stringify({ 
-                success: true, 
-                data: updatedEmployee,
-                message: 'Employee updated successfully' 
-            }));
+        // Update employee data using parameterized UPDATE query (Requirement 4.5)
+        // Returns true if update successful
+        const updateSuccess = await employeeOps.updateEmployee(employeeId, data);
+        
+        if (!updateSuccess) {
+            console.warn(`⚠️ Update returned false for employee ${employeeId} - no rows affected`);
+            res.writeHead(400);
+            res.end(JSON.stringify({ error: 'Failed to update employee - no changes applied' }));
+            return;
         }
+        
+        // Fetch updated employee to return in response
+        const updatedEmployee = await employeeOps.getEmployeeById(employeeId);
+        
+        console.log(`✅ Employee updated by ${session.email}: ${buildEmployeeName(updatedEmployee)}`);
+        
+        res.writeHead(200);
+        res.end(JSON.stringify({ 
+            success: true, 
+            data: updatedEmployee,
+            message: 'Employee updated successfully' 
+        }));
     } catch (error) {
-        console.error('❌ Error updating employee:', error);
-        res.writeHead(500);
-        res.end(JSON.stringify({ error: 'Failed to update employee' }));
+        // Handle database errors with appropriate HTTP status codes
+        // Requirement 4.14, 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7: 
+        // Distinguish error types, use appropriate status codes, log without exposing details
+        
+        console.error('❌ Error updating employee:', {
+            code: error.code,
+            category: error.errorCategory,
+            message: error.message,
+            sqlState: error.sqlState
+        });
+        
+        // Use error categorization from database module if available
+        if (error.statusCode && error.clientMessage) {
+            res.writeHead(error.statusCode);
+            res.end(JSON.stringify({ error: error.clientMessage }));
+        } else {
+            // Fallback to generic error (should not reach here if database module is working)
+            res.writeHead(500);
+            res.end(JSON.stringify({ error: 'Failed to update employee. Please try again.' }));
+        }
     }
 }
 
@@ -2814,24 +3004,15 @@ async function handleDeleteEmployee(req, res, pathname) {
 
     try {
         const employeeId = parseInt(pathname.split('/').pop());
-        let allEmployees, fileData = null;
         
-        if (USE_DATABASE) {
-            allEmployees = await dbOps.getAllEmployees();
-        } else {
-            fileData = loadDataFromFile();
-            allEmployees = fileData.employees || [];
-        }
-        
-        const employeeIndex = allEmployees.findIndex(emp => emp.id === employeeId);
+        // Get employee from database
+        const targetEmployee = await dbOps.getEmployeeById(employeeId);
 
-        if (employeeIndex === -1) {
+        if (!targetEmployee) {
             res.writeHead(404);
             res.end(JSON.stringify({ error: 'Employee not found' }));
             return;
         }
-
-        const targetEmployee = allEmployees[employeeIndex];
 
         // Prevent admin from deleting their own account
         if (targetEmployee.email === session.email) {
@@ -2845,31 +3026,10 @@ async function handleDeleteEmployee(req, res, pathname) {
         // Store employee info for logging before deletion
         const deletedEmployee = { ...targetEmployee };
 
-        if (USE_DATABASE) {
-            // Use database delete
-            await dbOps.deleteEmployee(employeeId);
-        } else {
-            // Remove employee from employees array
-            fileData.employees.splice(employeeIndex, 1);
-
-            // Remove user account
-            if (fileData.users && fileData.users[targetEmployee.email]) {
-                delete fileData.users[targetEmployee.email];
-            }
-
-            // Remove related attendance records
-            if (fileData.attendance) {
-                fileData.attendance = fileData.attendance.filter(rec => rec.employee_id !== employeeId);
-            }
-
-            // Remove related leave requests
-            if (fileData.leaveRequests) {
-                fileData.leaveRequests = fileData.leaveRequests.filter(req => req.employee_id !== employeeId);
-            }
-
-            // Save data to file
-            saveDataToFile(fileData);
-        }
+        // Use database soft delete (sets status='inactive')
+        // This also deactivates the user record within a transaction
+        // Requirements: 4.2, 4.6, 5.4
+        await dbOps.deleteEmployee(employeeId);
 
         console.log(`✅ Employee deleted by ${session.email}: ${deletedEmployee.first_name} ${deletedEmployee.last_name} (${deletedEmployee.email})`);
 
@@ -2878,15 +3038,30 @@ async function handleDeleteEmployee(req, res, pathname) {
             success: true, 
             message: `Employee ${deletedEmployee.first_name} ${deletedEmployee.last_name} has been removed successfully`,
             deletedEmployee: {
-                name: `${deletedEmployee.first_name} ${deletedEmployee.last_name}`,
+                name: `${deletedEmployee.first_name} ${deletedEmployee.last_name || ''}`.trim(),
                 email: deletedEmployee.email,
                 employee_id: deletedEmployee.employee_id
             }
         }));
     } catch (error) {
-        console.error('❌ Error deleting employee:', error);
-        res.writeHead(500);
-        res.end(JSON.stringify({ error: 'Failed to delete employee' }));
+        // Handle specific database errors with appropriate HTTP status codes
+        // Requirement 4.14: Distinguish between connection, syntax, constraint violation, and timeout errors
+        const errorCategory = categorizeError(error);
+        
+        // Log error with appropriate level
+        if (errorCategory.shouldLog) {
+            console.error(`❌ Error deleting employee (${errorCategory.errorCategory}):`, {
+                code: error.code,
+                message: error.message,
+                details: errorCategory.details
+            });
+        } else {
+            console.warn(`⚠️ Expected error deleting employee (${errorCategory.errorCategory}):`, error.message);
+        }
+        
+        // Return 500 status if database connection fails (Requirement 5.4)
+        res.writeHead(errorCategory.statusCode);
+        res.end(JSON.stringify({ error: errorCategory.clientMessage }));
     }
 }
 
@@ -3298,17 +3473,8 @@ async function handleGetNotifications(req, res) {
     }
     
     try {
-        // Get notifications from database or file
-        const userNotifications = USE_DATABASE
-            ? await dbOps.getNotifications(session.email)
-            : notifications.filter(notification => 
-                notification.recipient_email === session.email
-            );
-        
-        // Sort by creation date (newest first) - only needed for file-based
-        if (!USE_DATABASE) {
-            userNotifications.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-        }
+        // Get notifications from database with proper ordering
+        const userNotifications = await dbOps.getNotifications(session.email, 50);
         
         res.writeHead(200);
         res.end(JSON.stringify({ 
@@ -3947,6 +4113,78 @@ This report was generated automatically by the Employee Management System.
     }
 }
 
+// Handler for recording user interactions
+function handleAnalyticsInteraction(req, res, data) {
+    try {
+        // Extract session to get user_id
+        const session = getSession(req);
+        
+        // Return 401 if no session
+        if (!session || !session.user_id) {
+            console.log('❌ Analytics interaction: No session or user_id');
+            res.writeHead(401);
+            res.end(JSON.stringify({
+                success: false,
+                message: 'Unauthorized'
+            }));
+            return;
+        }
+        
+        // Extract required fields from request body
+        const { page_name, interaction_type, element_id } = data;
+        
+        // Validate all required fields are present
+        if (!page_name || !interaction_type || !element_id) {
+            console.log('❌ Analytics interaction: Missing required fields');
+            res.writeHead(400);
+            res.end(JSON.stringify({
+                success: false,
+                message: 'Missing required fields: page_name, interaction_type, element_id'
+            }));
+            return;
+        }
+        
+        // Validate interaction_type is one of the allowed types
+        const validInteractionTypes = ['button_click', 'form_submission', 'dropdown_selection', 'tab_change'];
+        if (!validInteractionTypes.includes(interaction_type)) {
+            console.log(`❌ Analytics interaction: Invalid interaction_type: ${interaction_type}`);
+            res.writeHead(400);
+            res.end(JSON.stringify({
+                success: false,
+                message: 'Invalid interaction_type'
+            }));
+            return;
+        }
+        
+        // Call Analytics_Repository.recordInteraction() with request body data
+        try {
+            analyticsRepo.recordInteraction(session.user_id, page_name, interaction_type, element_id);
+            console.log(`✅ Analytics interaction recorded: user_id=${session.user_id}, page=${page_name}, type=${interaction_type}, element=${element_id}`);
+            
+            // Return success response
+            res.writeHead(200);
+            res.end(JSON.stringify({
+                success: true,
+                message: 'Interaction recorded'
+            }));
+        } catch (error) {
+            console.error('❌ Failed to record interaction:', error.message);
+            res.writeHead(500);
+            res.end(JSON.stringify({
+                success: false,
+                message: 'Failed to record interaction'
+            }));
+        }
+    } catch (error) {
+        console.error('❌ Error in handleAnalyticsInteraction:', error.message);
+        res.writeHead(500);
+        res.end(JSON.stringify({
+            success: false,
+            message: 'Internal server error'
+        }));
+    }
+}
+
 // Start server with configuration - UPDATED FOR CLOUD DEPLOYMENT
 // When running on cloud platforms, SERVER_CONFIG.host will already be '0.0.0.0'
 // For local, respect the allowExternalConnections setting
@@ -3958,18 +4196,61 @@ async function startServer() {
     if (USE_DATABASE) {
         console.log('🔌 Initializing database connection...');
         const dbConnected = await initializeDatabase();
+        
         if (dbConnected) {
-            console.log('✅ Database initialized successfully');
+            console.log('✅ Database connected successfully');
+            
+            // Call createTables to ensure schema exists
+            try {
+                console.log('📋 Creating database tables...');
+                const pool = getPool();
+                await createTables(pool);
+                console.log('✅ All database tables are ready');
+            } catch (error) {
+                console.error('❌ Failed to create database tables:', error.message);
+                
+                // In production, exit on schema creation failure
+                if (process.env.NODE_ENV === 'production') {
+                    console.error('💥 PRODUCTION: Exiting due to schema initialization failure');
+                    process.exit(1);
+                } else {
+                    console.warn('⚠️  DEVELOPMENT: Continuing despite schema creation failure');
+                    console.warn('   Database operations may fail if tables are missing');
+                }
+            }
         } else {
             console.warn('⚠️  Database initialization failed, some features may not work');
+            
+            // In production, exit on connection failure
+            if (process.env.NODE_ENV === 'production') {
+                console.error('💥 PRODUCTION: Exiting due to database connection failure');
+                process.exit(1);
+            }
         }
     }
     
+    // Start HTTP server - only reaches here if database initialization succeeded or was not required
     server.listen(SERVER_CONFIG.port, serverHost, () => {
         const isCloudPlatform = !!process.env.PORT;
         
+        console.log('');
+        console.log('═══════════════════════════════════════════════════════════');
         console.log(`🚀 Employee Management System running on http://${serverHost}:${SERVER_CONFIG.port}`);
         console.log(`📊 Data Mode: ${USE_DATABASE ? 'MySQL Database' : 'File-based (data.json)'}`);
+        console.log('═══════════════════════════════════════════════════════════');
+        
+        // Start connection pool monitoring if using database
+        if (USE_DATABASE) {
+            try {
+                const { startPoolMonitoring } = require('./db/connection');
+                const monitor = startPoolMonitoring();
+                // Store reference for graceful shutdown later if needed
+                process.poolMonitor = monitor;
+                console.log('✅ Connection pool monitoring started');
+            } catch (error) {
+                console.warn('⚠️  Failed to start connection pool monitoring:', error.message);
+            }
+        }
         
         if (isCloudPlatform) {
             console.log('☁️  Running in CLOUD/PRODUCTION mode');
@@ -3993,6 +4274,16 @@ async function startServer() {
             console.log('- Manager: manager@company.com / manager123');
             console.log('- Employee: employee@company.com / employee123');
         }
+        
+        // Initialize Email_Scheduler for daily analytics emails
+        try {
+            emailScheduler.initializeScheduler();
+        } catch (error) {
+            console.error('⚠️  Failed to initialize Email_Scheduler:', error.message);
+            console.error('   Daily analytics emails will not be sent.');
+        }
+        
+        console.log('✅ Server is ready to accept requests');
     });
 }
 

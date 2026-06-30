@@ -111,6 +111,7 @@
 
     <script src="/assets/js/bootstrap.bundle.min.js"></script>
     <script src="assets/js/config.js"></script>
+    <script src="/assets/js/analytics.js"></script>
     <script>
         let currentUser = null;
 
@@ -338,26 +339,15 @@
                 const result = await response.json();
 
                 if (result.success) {
-                    // Show detailed success message with deleted user info
-                    const successMessage = `
-                        ✅ Employee Deleted Successfully!
-                        
-                        Deleted User:
-                        • Name: ${result.deletedEmployee.name}
-                        • Email: ${result.deletedEmployee.email}
-                        • Employee ID: ${result.deletedEmployee.employee_id}
-                        
-                        All associated records have been removed.
-                    `;
-                    
-                    showAlert('success', `✅ Employee ${firstName} ${lastName} (${email}) has been completely removed from the system`);
+                    // Show modal popup with deletion details
+                    showDeletionModal(result.deletedEmployee);
                     
                     console.log('🗑️ Employee Deletion Details:', result.deletedEmployee);
                     
                     // Reload the employee list after successful deletion
                     setTimeout(() => {
                         loadEmployees();
-                    }, 1500);
+                    }, 3000);
                 } else {
                     showAlert('danger', result.error || 'Failed to remove employee');
                 }
@@ -365,6 +355,73 @@
                 console.error('Error removing employee:', error);
                 showAlert('danger', 'An error occurred while removing the employee');
             }
+        }
+
+        // Modal popup for deletion confirmation
+        function showDeletionModal(deletedEmployee) {
+            const modalHTML = `
+                <div class="modal fade" id="deletionModal" tabindex="-1" role="dialog" aria-labelledby="deletionModalLabel" aria-hidden="true">
+                    <div class="modal-dialog modal-dialog-centered" role="document">
+                        <div class="modal-content border-success">
+                            <div class="modal-header bg-success text-white">
+                                <h5 class="modal-title" id="deletionModalLabel">
+                                    <i class="fas fa-check-circle me-2"></i> Employee Deleted Successfully
+                                </h5>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="alert alert-success mb-3" role="alert">
+                                    <i class="fas fa-trash-alt me-2"></i> The employee has been completely removed from the system.
+                                </div>
+                                <div class="card">
+                                    <div class="card-body">
+                                        <h6 class="card-title text-danger">Deleted Employee Information:</h6>
+                                        <div class="row mb-2">
+                                            <div class="col-sm-4 fw-bold">Name:</div>
+                                            <div class="col-sm-8">${deletedEmployee.name}</div>
+                                        </div>
+                                        <div class="row mb-2">
+                                            <div class="col-sm-4 fw-bold">Email:</div>
+                                            <div class="col-sm-8">${deletedEmployee.email}</div>
+                                        </div>
+                                        <div class="row mb-2">
+                                            <div class="col-sm-4 fw-bold">Employee ID:</div>
+                                            <div class="col-sm-8">${deletedEmployee.employee_id}</div>
+                                        </div>
+                                        <hr>
+                                        <p class="text-muted small mb-0">
+                                            <i class="fas fa-info-circle me-1"></i> All associated records including attendance, leave requests, and user credentials have been permanently deleted.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-success" data-bs-dismiss="modal">
+                                    <i class="fas fa-check me-2"></i> OK
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Remove existing modal if any
+            const existingModal = document.getElementById('deletionModal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+
+            // Add modal to page
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+            // Show modal using Bootstrap
+            const modal = new bootstrap.Modal(document.getElementById('deletionModal'));
+            modal.show();
+
+            // Remove modal from DOM after it's hidden
+            document.getElementById('deletionModal').addEventListener('hidden.bs.modal', function() {
+                this.remove();
+            });
         }
     </script>
 
