@@ -7,7 +7,9 @@ const nodemailer = require('nodemailer');
 const cron = require('node-cron');
 
 // Load environment variables
-require('dotenv').config();
+// On Render, environment variables are provided directly
+// Only load from .env if it exists (local development)
+require('dotenv').config({ override: false });
 
 // Initialize data.json if it doesn't exist (for Render deployment)
 try {
