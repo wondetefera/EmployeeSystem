@@ -37,6 +37,13 @@ function sleep(ms) {
  * @returns {Promise<boolean>} - True if connected successfully, false otherwise
  */
 async function initializeDatabase() {
+  // Check if database mode is disabled
+  if (process.env.USE_DATABASE !== 'true') {
+    console.log('⚠️  USE_DATABASE is false - skipping database initialization');
+    console.log('⚠️  Using file-based storage (data.json) instead');
+    return false;
+  }
+
   const maxRetries = 3;
   const retryDelayMs = 5000; // 5 seconds
   
