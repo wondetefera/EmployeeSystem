@@ -15,7 +15,7 @@
 const mysql = require('mysql2/promise');
 const dns = require('dns').promises;
 const net = require('net');
-require('dotenv').config();
+require('dotenv').config({ override: false }); // Respect Render environment variables
 
 // Import diagnostic utilities and connection status tracking
 const diagnosticUtils = require('./diagnostic-utils');
