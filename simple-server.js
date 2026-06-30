@@ -10,16 +10,40 @@ const cron = require('node-cron');
 require('dotenv').config();
 
 // Initialize data.json if it doesn't exist (for Render deployment)
-const { initializeDataFile } = require('./init-data');
-initializeDataFile();
+try {
+    const { initializeDataFile } = require('./init-data');
+    initializeDataFile();
+} catch (error) {
+    console.log('⚠️  init-data.js not found, skipping data file initialization');
+}
 
 // Initialize database connection
 const { initializeDatabase, categorizeError, getPool } = require('./db/connection');
 const { createTables } = require('./db/schema');
 const dbOps = require('./db/operations');
-const employeeOps = require('./db/employees');
-const analyticsRepo = require('./db/Analytics_Repository');
-const emailScheduler = require('./db/Email_Scheduler');
+
+// Optional modules - wrap in try-catch to handle missing files
+let employeeOps, analyticsRepo, emailScheduler;
+try {
+    employeeOps = require('./db/employees');
+} catch (e) {
+    console.log('⚠️  employees.js not found');
+    employeeOps = null;
+}
+
+try {
+    analyticsRepo = require('./db/Analytics_Repository');
+} catch (e) {
+    console.log('⚠️  Analytics_Repository.js not found');
+    analyticsRepo = null;
+}
+
+try {
+    emailScheduler = require('./db/Email_Scheduler');
+} catch (e) {
+    console.log('⚠️  Email_Scheduler.js not found');
+    emailScheduler = null;
+}
 
 // Log database configuration
 console.log('📦 Database Configuration:');
@@ -399,8 +423,13 @@ const server = http.createServer((req, res) => {
                 const pageName = pathname === '/' ? 'login' : pathname.substring(1);
                 
                 // Import Analytics_Repository and record the page visit
-                const analyticsRepo = require('./db/Analytics_Repository');
-                analyticsRepo.recordPageVisit(session.user_id, pageName);
+                try {
+                    if (analyticsRepo && analyticsRepo.recordPageVisit) {
+                        analyticsRepo.recordPageVisit(session.user_id, pageName);
+                    }
+                } catch (e) {
+                    // Silently skip if analytics not available
+                }
             }
         } catch (error) {
             // Non-blocking error handling - log the error but don't block the response
@@ -2872,6 +2901,13 @@ async function handleUpdateEmployee(req, res, pathname, data) {
     }
 
     try {
+        // Check if employeeOps module is available
+        if (!employeeOps) {
+            res.writeHead(503);
+            res.end(JSON.stringify({ error: 'Employee operations not available' }));
+            return;
+        }
+
         const employeeId = parseInt(pathname.split('/').pop());
         
         // Get employee from database using parameterized query
@@ -4158,8 +4194,10 @@ function handleAnalyticsInteraction(req, res, data) {
         
         // Call Analytics_Repository.recordInteraction() with request body data
         try {
-            analyticsRepo.recordInteraction(session.user_id, page_name, interaction_type, element_id);
-            console.log(`✅ Analytics interaction recorded: user_id=${session.user_id}, page=${page_name}, type=${interaction_type}, element=${element_id}`);
+            if (analyticsRepo && analyticsRepo.recordInteraction) {
+                analyticsRepo.recordInteraction(session.user_id, page_name, interaction_type, element_id);
+                console.log(`✅ Analytics interaction recorded: user_id=${session.user_id}, page=${page_name}, type=${interaction_type}, element=${element_id}`);
+            }
             
             // Return success response
             res.writeHead(200);
@@ -4277,7 +4315,9 @@ async function startServer() {
         
         // Initialize Email_Scheduler for daily analytics emails
         try {
-            emailScheduler.initializeScheduler();
+            if (emailScheduler && emailScheduler.initializeScheduler) {
+                emailScheduler.initializeScheduler();
+            }
         } catch (error) {
             console.error('⚠️  Failed to initialize Email_Scheduler:', error.message);
             console.error('   Daily analytics emails will not be sent.');
