@@ -258,10 +258,10 @@
             }, 5000);
         }
 
-        async function resetPassword(email, firstName, lastName) {
-            alert(`🔐 Password Reset Started\n\nEmployee: ${firstName} ${lastName}\nEmail: ${email}`);
+        async function resetPassword(email, fullName) {
+            alert(`🔐 Password Reset Started\n\nEmployee: ${fullName}\nEmail: ${email}`);
             
-            const confirmMessage = `Are you sure you want to reset the password for ${firstName} ${lastName}?\n\nThis will generate a new temporary password.`;
+            const confirmMessage = `Are you sure you want to reset the password for ${fullName}?\n\nThis will generate a new temporary password.`;
             
             if (!confirm(confirmMessage)) {
                 return;
@@ -305,7 +305,7 @@
                 if (result.success) {
                     console.log(`✅ Reset successful, showing modal dialog`);
                     alert(`✅ Password Reset Successful!\n\nNew Password: ${result.newPassword}`);
-                    showPasswordResetAlert(result.newPassword, firstName, lastName, email);
+                    showPasswordResetAlert(result.newPassword, fullName, fullName, email);
                 } else {
                     console.log(`❌ Reset failed:`, result.error);
                     alert(`❌ Reset Failed:\n${result.error || 'Unknown error'}`);
@@ -323,7 +323,7 @@
             return '123456';
         }
 
-        function showPasswordResetAlert(newPassword, firstName, lastName, email) {
+        function showPasswordResetAlert(newPassword, fullName, unused, email) {
             // Create a prominent modal dialog
             const modalId = 'passwordResetModal_' + Date.now();
             const modalHTML = `
@@ -339,12 +339,12 @@
                             <div class="modal-body">
                                 <div class="alert alert-success mb-3">
                                     <i class="fas fa-check me-2"></i>
-                                    Password successfully reset for <strong>${firstName} ${lastName}</strong>
+                                    Password successfully reset for <strong>${fullName}</strong>
                                 </div>
                                 
                                 <div class="card mb-3">
                                     <div class="card-body">
-                                        <p><strong>Employee:</strong> ${firstName} ${lastName}</p>
+                                        <p><strong>Employee:</strong> ${fullName}</p>
                                         <p><strong>Email:</strong> <code>${email}</code></p>
                                         <hr>
                                         <p><strong>New Temporary Password:</strong></p>
@@ -390,7 +390,7 @@
             } catch (e) {
                 console.error(`❌ Failed to show modal:`, e);
                 // Fallback to alert
-                alert(`Password reset successful!\n\nEmployee: ${firstName} ${lastName}\nNew Password: ${newPassword}`);
+                alert(`Password reset successful!\n\nEmployee: ${fullName}\nNew Password: ${newPassword}`);
             }
         }
         
